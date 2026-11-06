@@ -1,12 +1,12 @@
-# Jade tools CLI and local SDK
+# Jade CLI — native C++
 
-`jade-tools-cli` 0.1.1 runs the existing native Jade build/test engine independently of VS Code. It reuses the JavaScript orchestration and C++ helpers from Jade Native Runner 0.10.1. Jade owns compilation, object semantics and test lifecycle. A compatible installed Windows Jade runtime is required; vendor DLLs are not distributed here.
+`jade-cli.exe` 0.2.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
 
-This is a local development package, not an npm-published release. The package includes the shared SDK under `sdk/`, native helpers and the `jade-cli` executable. `@jade-local-tools/sdk` is its internal SDK identity; no separate published dependency is required. The extension consumes a pinned packed copy without sibling-checkout imports.
+Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. VS Code and the official MCP adapter communicate with this CLI through its JSONL service; editor JavaScript and the MCP protocol adapter are separate from the native engine.
 
 ## Commands
 
-Unzip the Windows x64 distribution and run `jade-cli.exe help`. Keep its adjacent `bin` and `sdk` folders together with the executable. No separate Node.js installation is needed. Add that distribution folder to PATH to use `jade-cli` from another working folder. Developers can also run `node bin/jade-cli.js help` from a source checkout.
+Unzip the Windows x64 distribution and run `jade-cli.exe help`. Keep its adjacent `native` folder with the executable. Add the distribution folder to PATH to use `jade-cli` from any working folder. Neither users nor CLI builders need Node or npm.
 
 ```text
 jade-cli doctor --config jade.json --json
@@ -58,11 +58,11 @@ An authenticated per-user named-pipe broker owns native processes and retains a 
 
 A held inspector/debugger helper lease returns an explicit busy result to another client rather than terminating debugging or waiting indefinitely. Close that session before compiling. The broker releases warm runtime handles before external tools. Surviving native PIDs block broker restart until ownership is resolved. It never terminates unrelated Jade applications.
 
-Default broker state: `%LOCALAPPDATA%/JadeTools/broker-v1`. Set `JADE_TOOLS_STATE_DIRECTORY` to a separate private directory for isolated tests. `disconnect` releases retained native sessions; `shutdown` closes the broker and its owned helpers. These affect clients sharing that broker.
+Default broker state: `%LOCALAPPDATA%/JadeTools/broker-v2-native`. Set `JADE_TOOLS_STATE_DIRECTORY` to a separate private directory for isolated tests. `disconnect` releases retained native sessions; `shutdown` closes the broker and its owned helpers. These affect clients sharing that broker. The native broker has a separate namespace from the archived Node implementation.
 
 SingleUser Source must be available for initial backup. MultiUser Source uses native quiesced online backup: clients stay connected while updates briefly pause. Source server mode and original INI are not rewritten. Inspection is native read-only with security enforced. Test/application execution can mutate Working data.
 
-## Extension and SDK integration
+## Extension and MCP integration
 
 `jade-cli service --stdio` accepts JSONL:
 
@@ -77,40 +77,28 @@ Inspection sessions bind target/configuration identity. Close an old session bef
 
 Internal adapter gateways `native.run` and `helper inspect|debug|compiler [session.json]` preserve existing native protocols. Utilities are restricted to `jadclient`, `jadloadb`, `jdbutilb` and `jdbadmin` in the configured installation. These are trusted desktop interfaces, not unrestricted MCP tools or publication approval mechanisms. The helper gateway forwards native stdio under a broker lease. Existing version-pinned debugger ABI checks remain active. Arbitrary expressions, GUI hosting and unrestricted attach are not added.
 
-The CommonJS SDK exports `JadeEngine` and `sourceFiles`; the package's `./client` export provides `openClient()` for shared broker access. Production multi-client native operations should use the broker. No MCP server is implemented here.
+Consumers launch `jade-cli.exe service --stdio`; they do not import an execution SDK. `{ "command": "cli", "operation": "build", "argv": [], "cwd": "C:/repos/example" }` uses the same configuration discovery and command handling as the terminal. `prepare` returns resolved configuration metadata without connecting to a database. The MCP repository owns the official MCP protocol adapter.
 
-## Development
+## Development and verification
 
-### Standalone Windows distribution
+Build with the Visual Studio 2022 x64 C++ toolchain and Windows SDK:
 
-`npm run package:standalone` builds `dist/jade-cli-win-x64/jade-cli.exe` and `dist/jade-cli-win-x64.zip`. The executable contains the Node runtime using the official Node single-executable application mechanism; JavaScript/native helper sidecars remain in `bin` and `sdk`. The ZIP is the complete deployable folder. It requires the configured Jade installation, but no Node installation, package manager or VS Code.
+```powershell
+./scripts/build-native-cli.ps1
+```
 
-Packaging requires the pinned Node v24.22.1 build runtime and development dependency `postject` 1.0.0-alpha.6. Install development dependencies from the lockfile before building. The matching Node runtime license is included. When Windows SDK signtool is available its original Node signature is removed before resource injection; the resulting executable is unsigned until a release signing step is added. A source package must run this build before `npm pack` to include the root `jade-cli.exe` used by the extension.
+The script compiles the native library, runs grouped C++ tests, and builds `dist/jade-cli-win-x64/jade-cli.exe` with a static C++ runtime. It discovers the installed Visual Studio toolchain automatically. `-TestsOnly` runs tests; `-TestFilter 'BrokerRuntime*'` selects a group. No package manager or downloaded C++ dependency is needed: the existing MIT-licensed nlohmann/json header is vendored.
 
-Set `JADE_CLI_STANDALONE_EXE` to the generated executable and run `node --test tests/StandaloneCli/StandaloneCli_run_tests.test.js` to verify help, a real source query, broker startup and shutdown with Node absent from PATH. That proof does not substitute for native Jade build/test controls.
+Tests cover configuration and positional arguments, schema-qualified discovery, process quoting/cancellation, source staging, diagnostics, warm sessions, broker startup races, authentication, client ownership, helper leases and recovery. The [test coverage matrix](native-cli/tests/README.md) identifies each test group and its limits. Default tests do not open a developer database. The explicit `JADE_CPP_TEST_SEED` connected proof accepts a private disposable TEMP database and validates actual Jade compilation and test execution. Hosted CI does not claim connected coverage without the licensed runtime.
 
-The packaging implementation follows [Node v24.22.1 single-executable application documentation](https://nodejs.org/download/release/v24.22.1/docs/api/single-executable-applications.html). Generated EXE/ZIP files remain outside Git; native source, packaging scripts, lockfile and license notices are tracked.
-
-`npm test` runs contract/process tests without opening Jade databases. `npm run check` verifies assets/manifests/links. Native connected controls use private databases separately. Rebuilding helpers requires the installed Jade SDK and C++ build tools. Do not commit vendor DLLs, databases, caches, credentials or generated reports.
-
-Vendored dependencies retain their original licenses. No new license is assigned to legacy integration code or Jade vendor components. Distribution licensing remains to be decided.
+Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade vendor DLLs, databases, credentials or generated evidence belong in Git. The previous Node implementation is preserved on the `codex/agent/ci-releases` branch (with a local `codex/node-cli-baseline` checkpoint) for comparison; it is not included in the native distribution.
 
 ## GitHub builds and releases
 
-The Windows [build/test workflow](https://github.com/darrenhull/Jade-CLI/actions/workflows/build-release.yml) runs for pushes, pull requests and manual dispatches. It installs the npm lockfile, runs the SDK/broker/release tests, builds the portable EXE and ZIP with pinned Node 24.22.1, and verifies the resulting executable with Node removed from PATH. Every successful build retains downloadable artifacts for one day; tagged GitHub releases keep the published downloads.
+Windows CI builds and tests the native executable, verifies a portable copy outside the checkout, and creates `jade-cli-win-x64.zip`, `jade-cli.exe` and `SHA256SUMS`. The ZIP contains the complete native runtime and its hash manifest; the standalone EXE still needs the adjacent native helpers for connected operations. There is no npm runtime release.
 
-Publish a release by updating `package.json` and its lockfile, then pushing a matching `v<version>` tag, for example `v0.1.1`. A mismatched tag fails before packaging. Only a successfully tested tag build can publish a GitHub release. Release assets are:
+Release tags must match the native version and refer to a commit on the reviewed default branch. The release job verifies downloaded artifacts before publishing. Consumers pin the native distribution and verify its manifest and checksums before packaging. Dependency updates remain reviewable pull requests; user approval is required. No release or merge is performed by an ordinary build.
 
-- `jade-cli-win-x64.zip`: the complete portable folder, including supporting SDK/native files.
-- `jade-cli.exe`: the runtime-embedded executable; it still needs the `bin`/`sdk` files from the ZIP.
-- `jade-tools-cli-<version>.tgz`: the exact package consumed by downstream extensions and adapters.
-- `SHA256SUMS`: SHA-256 checksums for those three assets.
-
-The release job rechecks downloaded artifact checksums before publication. It uses GitHub's repository-scoped token; publication does not require an npm account or marketplace credentials. Action dependencies are pinned to exact commits.
-
-Hosted CI reuses this repository's checked-in owned native helper binaries and checks their presence and distribution hashes. It does **not** rebuild those C++ helpers or claim connected native Jade compiler/test coverage: those require the separately installed, licensed Jade SDK/runtime and disposable databases. The standalone smoke test covers help, source queries and broker startup/shutdown without a database.
-
-The VS Code extension and MCP adapter consume immutable release packages. Their update workflows can check this repository's latest release, verify its checksum, test the updated dependency and open a reviewable update pull request. Routine checks work with public releases and each consumer's own token; no token shared between repositories is required. A consumer's manual update workflow can also be dispatched immediately after a CLI release.
 ## Architecture diagram
 
 ![Architecture](docs/architecture.drawio.svg)

@@ -1,24 +1,24 @@
-# Jade CLI / SDK engineering and review guidance
+# Native Jade CLI engineering and review guidance
 
 ## Architecture and responsibilities
 
-This repository owns jade-cli, the public SDK, per-user broker, build/test orchestration, owned C++ helpers and shared release/packaging automation. Jade owns compilation, object semantics, persistence and native execution.
+This repository owns the native C++ jade-cli executable, per-user broker, build/test orchestration, owned C++ helpers and shared release/packaging automation. Jade owns compilation, object semantics, persistence and native execution. Consumers use the JSONL service; the CLI must not embed or launch Node, JavaScript or Python. Development-only automation is separate from the distributed native runtime.
 
 - Preserve coordinated native/SingleUser ownership across CLI, extension and MCP clients. Consumers must not introduce an independent execution path.
 - Review discovery, dependency closure, schema ancestry, structural changes and successful-input inventories together, including test-class switches and failure recovery.
 - Keep ABI/version assumptions explicit. Do not guess native signatures or replace native semantics with a permissive custom checker.
 - Keep inspection read-only; bind sessions/OIDs/cursors to their selected targets and retain native resources/configuration until actual process exit.
 - Check public exports, framing, broker authentication/fingerprints, bounded output and cancellation against both consumers.
-- Packed SDK automation must work without a sibling checkout and must not expose arbitrary commands.
+- Shared native release automation must work without a sibling checkout and must not expose arbitrary commands.
 
 ## Engineering approach
 
 - Understand the change, its callers and its runtime/data boundaries before editing. Inspect implementation and tests; do not infer behavior from names alone.
 - Use TDD: add a meaningful failing test, verify the intended failure, implement the smallest correct change, then run relevant regressions. Record red/green evidence in the PR.
 - Keep one top-level class per source file, named for that class. Keep executable entry points thin. Cohesive stateless functions are appropriate; avoid artificial classes.
-- Store new tests under tests/{Class}/{Class}_{method}_tests.test.js (or .test.ts). Use the module name for functional modules and share realistic fixture setup.
+- Store native tests under tests/{Class}/{Class}_{method}_tests.cpp and PowerShell automation tests under tests/{Module}/{Module}_{method}_tests.ps1. Keep tests grouped by their owning class or module; share realistic fixtures. Do not disable assertions in test builds.
 - Apply SOLID at actual boundaries: separate transport, configuration, orchestration, native execution and presentation; inject process/filesystem/network dependencies where tests need control.
-- Apply DRY across repositories: the CLI/SDK owns native semantics, shared sessions, dependency selection, release dependency updates and standalone packaging. Consumers use public versioned exports.
+- Apply DRY across repositories: the native CLI owns native semantics, shared sessions and dependency selection. Consumers use the versioned JSONL contract and verified native distribution. Share development-only automation without shipping a second execution engine.
 - Prefer maintained libraries and official SDKs for established protocols. Keep custom glue small and readable; avoid speculative abstractions and catch-and-ignore fallbacks.
 - Run focused tests first, then relevant regression/build/package checks. Default tests must not open a developer's Jade database; connected tests require explicit opt-in, disposable validated fixtures and cleanup of owned resources only.
 - Review the final diff for unintended files, secrets, stale comments and behavior changes. Document the final behavior, validation and practical limitations.

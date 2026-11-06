@@ -11,6 +11,7 @@ coverage/
 !sdk/native/jade-inspect-helper.exe
 !sdk/native/jade-debug-helper.exe
 !sdk/native/jade-native-helper.exe
+!native-bin/*.exe
 *.dll
 *.pdb
 *.obj

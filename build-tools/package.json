@@ -1,0 +1,13 @@
+{
+  "name": "jade-build-tools",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Development-only packaging tools for the official Jade MCP JavaScript adapter; no CLI or broker runtime.",
+  "main": "src/StandalonePackager.js",
+  "exports": {
+    "./standalone-packager": "./src/StandalonePackager.js"
+  },
+  "files": ["src/StandalonePackager.js", "licenses/node-v24.22.1-LICENSE.txt", "README.md"],
+  "scripts": {"test": "node --test tests/*/*_tests.test.js"},
+  "engines": {"node": ">=24.22.1"}
+}

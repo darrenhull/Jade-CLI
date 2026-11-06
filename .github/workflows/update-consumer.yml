@@ -6,6 +6,9 @@ on:
       cli_tag:
         type: string
         default: ''
+      cli_automation_ref:
+        type: string
+        required: true
       update_script:
         type: string
         default: scripts/update-cli.cjs
@@ -42,6 +45,19 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Validate immutable native automation reference
+        shell: pwsh
+        env:
+          AUTOMATION_REF: ${{ inputs.cli_automation_ref }}
+        run: |
+          if ($env:AUTOMATION_REF -notmatch '^[a-f0-9]{40}$') { throw 'Pin CLI automation to an immutable commit.' }
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: darrenhull/Jade-CLI
+          ref: ${{ inputs.cli_automation_ref }}
+          path: .jade-automation
+          sparse-checkout: scripts
+          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24.22.1'
@@ -53,15 +69,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CLI_TAG: ${{ inputs.cli_tag }}
           UPDATE_SCRIPT: ${{ inputs.update_script }}
+          JADE_NATIVE_UPDATER_SCRIPT: ${{ github.workspace }}/.jade-automation/scripts/update-native-cli.ps1
         run: node "$env:UPDATE_SCRIPT" "$env:CLI_TAG"
-      - name: Refresh dependency lock
-        if: steps.cli.outputs.updated == 'true'
-        run: npm update jade-tools-cli --package-lock-only --ignore-scripts --no-audit --no-fund --force
       - name: Validate the reviewed dependency
         if: steps.cli.outputs.updated == 'true'
         shell: pwsh
         env:
           UPDATE_SCRIPT: ${{ inputs.update_script }}
+          JADE_NATIVE_UPDATER_SCRIPT: ${{ github.workspace }}/.jade-automation/scripts/update-native-cli.ps1
           PACKAGE_SCRIPT: ${{ inputs.package_script }}
           RELEASE_SCRIPT: ${{ inputs.release_script }}
           RELEASE_ARGS_JSON: ${{ inputs.release_args_json }}
@@ -121,13 +136,13 @@ jobs:
           git push --set-upstream origin "$env:CLI_BRANCH"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           @"
-          Update the committed CLI archive and npm lockfile to $env:CLI_TAG.
+          Update the committed native C++ CLI distribution and hash pin to $env:CLI_TAG.
 
           SHA-256: $env:CLI_SHA
 
-          The release URL, checksum, archive paths and package version were verified. Consumer tests, packaging and release checks passed before this PR was opened. CI is explicitly dispatched on this branch as well. This updates the dependency for review; it does not publish a consumer release or modify a Jade database.
+          The official release URL, download/expanded-size limits, archive paths, version and native runtime hashes were verified. Consumer tests, packaging and release checks passed before this PR was opened. CI is explicitly dispatched on this branch as well. This updates the native dependency for review; it does not publish a consumer release or modify a Jade database.
           "@ | Set-Content -LiteralPath dist/cli-update-pr.md -Encoding utf8
-          gh pr create --base "$env:BASE_BRANCH" --head "$env:CLI_BRANCH" --title "Update Jade CLI to $env:CLI_TAG" --body-file dist/cli-update-pr.md
+          gh pr create --base "$env:BASE_BRANCH" --head "$env:CLI_BRANCH" --title "Update Jade CLI to $env:CLI_TAG" --body-file dist/cli-update-pr.md --reviewer darrenhull
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh workflow run "$env:CI_WORKFLOW" --ref "$env:CLI_BRANCH"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

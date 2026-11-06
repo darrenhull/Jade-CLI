@@ -1,4 +1,4 @@
-name: Build, test and release CLI
+name: Build, test and release native CLI
 
 on:
   push:
@@ -17,63 +17,62 @@ concurrency:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.22.1'
-          cache: npm
-      - name: Install locked build dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Check release version
-        run: node -e "const r=require('./scripts/prepare-release.cjs');r.validateVersion(require('./package.json').version,process.env.GITHUB_REF_TYPE==='tag'?process.env.GITHUB_REF_NAME:undefined)"
-      - name: Test SDK, broker and release contracts
-        run: npm test
-      - name: Check required runtime assets
-        run: npm run check
-      - name: Build portable Windows EXE and complete ZIP
-        run: npm run package:standalone
-      - name: Test executable with Node absent from PATH
-        run: |
-          $env:JADE_CLI_STANDALONE_EXE = Join-Path $PWD 'dist/jade-cli-win-x64/jade-cli.exe'
-          npm test
-      - name: Pack the versioned CLI dependency
-        run: npm pack --pack-destination dist
-      - name: Verify release files and write SHA256SUMS
-        run: node scripts/prepare-release.cjs
+      - name: Build and test native C++ CLI
+        run: ./scripts/build-native-cli.ps1
+      - name: Test verified native release updates
+        run: Get-ChildItem tests/NativeReleaseUpdater -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
+      - name: Test native distribution packaging
+        run: ./tests/NativeDistribution/NativeDistribution_package_tests.ps1
+      - name: Smoke test outside checkout without Node
+        run: ./scripts/smoke-native-cli.ps1
+      - name: Create native release assets
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: ./scripts/package-native-cli.ps1 -Tag $env:RELEASE_TAG
       - name: Retain tested distribution
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: jade-cli-windows-${{ github.sha }}
           path: |
             dist/jade-cli-win-x64.zip
-            dist/jade-tools-cli-*.tgz
+            dist/jade-cli.exe
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 1
-      - name: Record test scope
+      - name: Record native test scope
         run: |
           @'
-          ## Jade CLI verification
-          - SDK, broker and release contract tests passed.
-          - Portable EXE/source-query/broker proof passed without Node on PATH.
-          - Runtime sidecar hashes and release version were checked.
-          - Hosted CI uses the checked-in owned helper binaries. Rebuilding the C++ helpers or running connected Jade tests requires a Windows environment with the licensed Jade SDK/runtime; those checks are not claimed by this hosted run.
+          ## Native Jade CLI verification
+          - Native C++ contract, process, broker and packaging tests passed.
+          - The portable executable worked outside the checkout without Node.
+          - The distribution has no JavaScript engine, embedded Node or Python.
+          - Hosted checks use committed owned helper executables; native connected Jade tests require the separately licensed runtime and a disposable database and are not claimed here.
           '@ >> $env:GITHUB_STEP_SUMMARY
+
+  developer-tools:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.22.1'
+      - name: Test development-only MCP packaging and PR automation
+        run: node --test build-tools/tests/*/*_tests.test.js tests/AgentPullRequest/*_tests.test.js tests/release-ancestry/*_tests.test.js
 
   open-agent-pr:
     if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/')
-    needs: build
+    needs: [build, developer-tools]
     permissions:
       contents: read
       pull-requests: write
     uses: ./.github/workflows/open-agent-pr.yml
-    with:
-      source_pr: ${{ github.ref == 'refs/heads/codex/agent/ci-releases' && 1 || 0 }}
 
   release-guard:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
@@ -81,7 +80,7 @@ jobs:
 
   release:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    needs: [build, release-guard]
+    needs: [build, developer-tools, release-guard]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -91,18 +90,13 @@ jobs:
         with:
           name: jade-cli-windows-${{ github.sha }}
           path: release
-      - name: Restore the executable from its complete distribution
-        run: unzip -p release/jade-cli-win-x64.zip jade-cli.exe > release/jade-cli.exe
-      - name: Verify downloaded assets
+      - name: Verify downloaded native assets
         working-directory: release
         run: sha256sum --check SHA256SUMS
-      - name: Publish tested GitHub release
+      - name: Publish tested native GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
-        run: |
-          args=()
-          if [[ "$RELEASE_TAG" == *-* ]]; then args+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" release/jade-cli-win-x64.zip release/jade-cli.exe release/jade-tools-cli-*.tgz release/SHA256SUMS --verify-tag --title "Jade CLI $RELEASE_TAG" --generate-notes --notes "Download jade-cli-win-x64.zip and keep its bin/sdk support files with jade-cli.exe. No separate Node installation is required. A compatible Jade runtime is required for native operations. The npm TGZ is the pinned dependency used by the VS Code extension and MCP adapter." "${args[@]}"
+        run: gh release create "$RELEASE_TAG" release/jade-cli-win-x64.zip release/jade-cli.exe release/SHA256SUMS --verify-tag --title "Jade CLI $RELEASE_TAG" --generate-notes --notes "Download jade-cli-win-x64.zip and keep native helpers with jade-cli.exe. Native C++, no Node/Python runtime. Connected operations require an installed compatible licensed Jade runtime."
