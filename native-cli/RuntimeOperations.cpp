@@ -1,6 +1,7 @@
 #include "RuntimeOperations.hpp"
 #include "SourceCatalog.hpp"
 #include "Version.hpp"
+#include "ProjectConfiguration.hpp"
 #include <fstream>
 #include <set>
 namespace jade::native {
@@ -49,14 +50,30 @@ void RuntimeOperations::releaseInspections() {
 }
 void RuntimeOperations::disconnect() {
     std::exception_ptr failure;
-    try { releaseInspections(); } catch (...) { failure=std::current_exception(); }
-    try { working_.disconnect(); } catch (...) { if(!failure)failure=std::current_exception(); }
-    if(failure)std::rethrow_exception(failure);
+    try {
+        releaseInspections();
+    } catch (...) {
+        failure = std::current_exception();
+    }
+    try {
+        working_.disconnect();
+    } catch (...) {
+        if (!failure)
+            failure = std::current_exception();
+    }
+    if (failure)
+        std::rethrow_exception(failure);
 }
 nlohmann::json RuntimeOperations::runPrepared(const PreparedCommand &prepared,
                                               const nlohmann::json &extras,
                                               const WorkingEngine::Output &output,
                                               std::atomic_bool *cancelled) {
+    if (prepared.command == "init") {
+        auto result = prepared.initialization;
+        result["code"] = 0;
+        result["passed"] = true;
+        return result;
+    }
     auto request = extras;
     request["command"] = prepared.command;
     request["config"] = prepared.config;
@@ -116,23 +133,37 @@ nlohmann::json RuntimeOperations::runPrepared(const PreparedCommand &prepared,
         return results[0]["result"];
     return {{"code", code}, {"passed", passed}, {"cancelled", wasCancelled}, {"results", results}};
 }
-nlohmann::json RuntimeOperations::execute(const nlohmann::json &request,
+nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
                                           WorkingEngine::Output output,
                                           std::atomic_bool *cancelled) {
+    auto request = originalRequest;
     const auto command = request.value("command", "");
-    const auto config = request.value("config", nlohmann::json::object());
+    auto config = request.value("config", nlohmann::json::object());
+    if (command != "cli" && command != "prepare" && command != "disconnect" &&
+        command != "inspect.close") {
+        const bool connectionRequired = command == "build" || command == "test" ||
+                                        command.starts_with("working.") ||
+                                        command.starts_with("inspect.") || command == "native.run";
+        config = ProjectConfiguration().resolve(
+            config, fs::u8path(request.value("cwd", pathText(fs::current_path()))),
+            connectionRequired);
+        request["config"] = config;
+    }
     if (command == "working.location")
-        return {{"code",0},{"passed",true},{"working",WorkingEngine::workingLocation(config)}};
+        return {{"code", 0}, {"passed", true}, {"working", WorkingEngine::workingLocation(config)}};
     if (command == "working.prepare") {
         releaseInspections();
-        return {{"code",0},{"passed",true},{"working",working_.prepareDatabase(config,output,cancelled)}};
+        return {{"code", 0},
+                {"passed", true},
+                {"working", working_.prepareDatabase(config, output, cancelled)}};
     }
     if (command == "inspect.target") {
-        const auto target=request.value("target","working");
-        if(target!="source"&&target!="working")throw std::runtime_error("Invalid database selection.");
-        auto selected=target=="working"?WorkingEngine::inspectionConfig(config):config;
-        selected["readOnly"]=true;
-        return {{"code",0},{"passed",true},{"config",selected}};
+        const auto target = request.value("target", "working");
+        if (target != "source" && target != "working")
+            throw std::runtime_error("Invalid database selection.");
+        auto selected = target == "working" ? WorkingEngine::inspectionConfig(config) : config;
+        selected["readOnly"] = true;
+        return {{"code", 0}, {"passed", true}, {"config", selected}};
     }
     if (command == "cli" || command == "prepare") {
         const auto prepared = CommandLine().prepare(
@@ -256,8 +287,8 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &request,
         return {{"code", 0},
                 {"passed", true},
                 {"sessionId", sessionId},
-                {"body", found->second->request(action, request.value("args", nlohmann::json::object()),
-                                          cancelled)}};
+                {"body", found->second->request(
+                             action, request.value("args", nlohmann::json::object()), cancelled)}};
     }
     throw std::runtime_error("Unsupported native operation: " + command);
 }

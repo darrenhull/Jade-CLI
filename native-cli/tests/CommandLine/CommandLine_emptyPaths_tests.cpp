@@ -10,7 +10,11 @@ int main() {
         R"({"installPath":"install","databasePath":"database","iniPath":"","storagePath":"","program":"","workspace":"","workingDatabaseDirectory":""})");
     writeText(root / "Pet.cls", "");
     auto prepared = CommandLine().prepare("build", {"Pet.cls"}, root);
-    for (auto key : {"iniPath", "storagePath", "program", "workspace", "workingDatabaseDirectory"})
+    writeText(root / "jade.json", R"({"installPath":"install","databasePath":"database"})");
+    auto omitted = CommandLine().prepare("build", {"Pet.cls"}, root);
+    assert(prepared.config == omitted.config);
+    assert(prepared.config["iniPath"] == utf8((root / "database" / "jade.ini").wstring()));
+    for (auto key : {"program", "workspace", "workingDatabaseDirectory"})
         assert(!prepared.config.contains(key));
     assert(prepared.files.size() == 1);
     writeText(root / "jade.json", R"({"iniPath":null})");

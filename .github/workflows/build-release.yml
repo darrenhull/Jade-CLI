@@ -30,6 +30,8 @@ jobs:
         run: Get-ChildItem tests/NativeDistribution -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
       - name: Smoke test outside checkout without Node
         run: ./scripts/smoke-native-cli.ps1
+      - name: Test project initialization and inferred configuration
+        run: ./tests/ProjectSetup/ProjectSetup_commands_tests.ps1
       - name: Create native release assets
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
