@@ -1,4 +1,5 @@
 #include "RuntimeOperations.hpp"
+#include "Version.hpp"
 #include <iostream>
 #include <stdexcept>
 using namespace jade::native;
@@ -9,7 +10,7 @@ int main() {
                                       "jade-native-dispatch-tests");
         auto doctor =
             runtime.execute({{"command", "doctor"}, {"config", nlohmann::json::object()}});
-        if (doctor["runtimeImplementation"] != "native-cpp" || doctor["sdkVersion"] != "0.2.0" ||
+        if (doctor["runtimeImplementation"] != "native-cpp" || doctor["sdkVersion"] != cliVersion ||
             !doctor["passed"].get<bool>())
             throw std::runtime_error("doctor must truthfully identify native implementation");
         bool rejected = false;
@@ -41,23 +42,31 @@ int main() {
         }
         if (!rejected)
             throw std::runtime_error("unknown operations must fail");
-        const auto targetConfig=nlohmann::json{{"installPath","C:/missing-jade-runtime"},
-             {"databasePath","C:/missing-jade-runtime/system"},
-             {"storagePath",std::filesystem::temp_directory_path().string()},
-             {"workspaceRoots",{std::filesystem::current_path().string()}}};
-        const auto location=runtime.execute({{"command","working.location"},{"config",targetConfig}});
-        if(!location.value("passed",false)||!location["working"].contains("databasePath")||
-            location["working"]["databasePath"]==targetConfig["databasePath"])
-            throw std::runtime_error("Working location must be resolved natively and separate from Source");
-        const auto sourceTarget=runtime.execute({{"command","inspect.target"},{"target","source"},{"config",targetConfig}});
-        if(!sourceTarget["config"].value("readOnly",false)||sourceTarget["config"]["databasePath"]!=targetConfig["databasePath"])
+        const auto targetConfig =
+            nlohmann::json{{"installPath", "C:/missing-jade-runtime"},
+                           {"databasePath", "C:/missing-jade-runtime/system"},
+                           {"storagePath", std::filesystem::temp_directory_path().string()},
+                           {"workspaceRoots", {std::filesystem::current_path().string()}}};
+        const auto location =
+            runtime.execute({{"command", "working.location"}, {"config", targetConfig}});
+        if (!location.value("passed", false) || !location["working"].contains("databasePath") ||
+            location["working"]["databasePath"] == targetConfig["databasePath"])
+            throw std::runtime_error(
+                "Working location must be resolved natively and separate from Source");
+        const auto sourceTarget = runtime.execute(
+            {{"command", "inspect.target"}, {"target", "source"}, {"config", targetConfig}});
+        if (!sourceTarget["config"].value("readOnly", false) ||
+            pathKey(std::filesystem::u8path(
+                sourceTarget["config"]["databasePath"].get<std::string>())) !=
+                pathKey(std::filesystem::u8path(targetConfig["databasePath"].get<std::string>())))
             throw std::runtime_error("Source inspection target identity changed");
         rejected = false;
         try {
             runtime.execute({{"command", "inspect.catalog"},
                              {"target", "source"},
-                             {"config", {{"installPath", "C:/missing-jade-runtime"},
-                                         {"databasePath", "C:/missing-jade-runtime/system"}}}});
+                             {"config",
+                              {{"installPath", "C:/missing-jade-runtime"},
+                               {"databasePath", "C:/missing-jade-runtime/system"}}}});
         } catch (const std::exception &) {
             rejected = true;
         }

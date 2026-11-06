@@ -35,7 +35,8 @@ nlohmann::json PreparedCommand::toJson() const {
             {"configFile",
              configFile.empty() ? nlohmann::json(nullptr) : nlohmann::json(text(configFile))},
             {"files", paths},
-            {"projectBuild", projectBuild}};
+            {"projectBuild", projectBuild},
+            {"initialization", initialization}};
 }
 PreparedCommand CommandLine::prepare(const std::string &command,
                                      const std::vector<std::string> &argv,
@@ -44,8 +45,9 @@ PreparedCommand CommandLine::prepare(const std::string &command,
     result.command = command;
     bool positional = false;
     std::vector<fs::path> files;
-    const std::set<std::string> options = {"config", "workspace", "program", "query",
-                                           "limit",  "offset",    "target",  "args"};
+    const std::set<std::string> options = {"config",   "workspace", "program", "query",   "limit",
+                                           "offset",   "target",    "args",    "profile", "install",
+                                           "database", "ini",       "server"};
     for (size_t i = 0; i < argv.size(); ++i) {
         const auto &arg = argv[i];
         if (!positional && arg == "--") {
@@ -77,9 +79,26 @@ PreparedCommand CommandLine::prepare(const std::string &command,
             if (directory == directory.parent_path())
                 break;
         }
-    if (result.configFile.empty() && (command == "build" || command == "test"))
-        throw std::runtime_error("No jade.json found in this folder or its parents. Create "
-                                 "jade.json or supply --config <file>.");
+    if (command == "init" && !files.empty())
+        throw std::runtime_error(
+            "Usage: jade-cli init [--profile <name>] [--install <Jade folder>]");
+    for (auto &file : files)
+        if ((command == "build" || command == "test") && !fs::is_regular_file(file))
+            throw std::runtime_error("Source is not a file: " + text(file));
+    if (command == "init" ||
+        (result.configFile.empty() && (command == "build" || command == "test"))) {
+        if (result.configFile.empty())
+            result.configFile =
+                (result.values.contains("workspace") ? absolute(cwd, result.values["workspace"])
+                                                     : fs::absolute(cwd)) /
+                L"jade.json";
+        auto initializationOptions = result.values;
+        if (command != "init" && !initializationOptions.contains("install"))
+            for (auto key : {"database", "ini", "server"})
+                initializationOptions.erase(key);
+        result.initialization =
+            configuration_.initialize(result.configFile, cwd, initializationOptions);
+    }
     if (!result.configFile.empty()) {
         std::ifstream in(result.configFile, std::ios::binary);
         if (!in)
@@ -89,30 +108,15 @@ PreparedCommand CommandLine::prepare(const std::string &command,
             throw std::runtime_error("Configuration must be a JSON object.");
     }
     const auto base = result.configFile.empty() ? cwd : result.configFile.parent_path();
-    for (const auto *key : {"installPath", "databasePath", "iniPath", "storagePath", "program",
-                            "workspace", "workingDatabaseDirectory"})
-        if (result.config.contains(key)) {
-            if (!result.config[key].is_string())
-                throw std::runtime_error(std::string("Configuration path must be a string: ") +
-                                         key);
-            if (result.config[key].get_ref<const std::string &>().empty()) {
-                result.config.erase(key);
-                continue;
-            }
-            result.config[key] = text(absolute(base, result.config[key]));
-        }
-    for (const auto *key : {"workspaceRoots", "files"})
-        if (result.config.contains(key)) {
-            if (!result.config[key].is_array())
-                throw std::runtime_error(std::string("Configuration paths must be an array: ") +
-                                         key);
-            for (auto &value : result.config[key])
-                value = text(absolute(base, value));
-        }
-    if (!result.config.contains("workspaceRoots"))
-        result.config["workspaceRoots"] = {text(fs::absolute(base))};
-    if (result.config["workspaceRoots"].empty())
-        throw std::runtime_error("Configure at least one workspace root.");
+    if (result.values.contains("profile"))
+        result.config["connection"] = result.values["profile"];
+    for (auto [option, key] : {std::pair{"install", "installPath"},
+                               std::pair{"database", "databasePath"}, std::pair{"ini", "iniPath"}})
+        if (result.values.contains(option))
+            result.config[key] = text(absolute(cwd, result.values[option]));
+    if (result.values.contains("server"))
+        result.config["server"] = result.values["server"];
+    result.config = configuration_.resolve(result.config, base);
     if (result.values.contains("workspace"))
         result.config["workspaceRoots"] = {text(absolute(cwd, result.values["workspace"]))};
     if (result.values.contains("program")) {

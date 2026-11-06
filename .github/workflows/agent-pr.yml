@@ -1,0 +1,22 @@
+name: Open native CLI agent pull request
+
+on:
+  push:
+    branches: ['codex/agent/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-agent-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Pull-request validation belongs to the normal PR event. GitHub may require
+  # owner approval on a new bot PR; dispatching another build would duplicate it.
+  open-agent-pr:
+    if: github.actor == 'darrenhull' && github.repository_owner == 'darrenhull'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/open-agent-pr.yml

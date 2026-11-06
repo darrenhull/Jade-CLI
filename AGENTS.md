@@ -58,7 +58,7 @@ This repository owns the native C++ jade-cli executable, per-user broker, build/
 - Independent checkouts must build from committed native inputs and declared toolchain/dependency versions.
 - Exclude credentials, user configuration, databases, caches, logs and research notes from Git. Track requested diagrams and build-required source, tests and notices.
 - Pin toolchains/dependencies and test the actual portable artifact outside the checkout without Node on PATH.
-- Validate PRs without publishing. Tags must match the native version and reference reviewed commits on `main`. Do not merge PRs or create release tags without authorization.
+- Validate PRs without publishing. Successful protected-main builds may publish a new version automatically; published versions stay immutable. Tags must match native versions and reviewed-main commits. Queue squash auto-merge only behind required owner approval and checks; never approve PRs or bypass branch protection on the user's behalf.
 - Keep README, examples, capabilities and diagrams aligned with implemented behavior. Distinguish hosted CI from connected checks requiring the licensed Jade runtime.
 
 ## Code Review Rules

@@ -1,6 +1,6 @@
 # Jade CLI — native C++
 
-`jade-cli.exe` 0.2.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
+`jade-cli.exe` 0.3.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
 
 Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. Terminal commands and JSONL service requests use the same native implementation.
 
@@ -9,9 +9,10 @@ Jade's installed native tools and object manager perform compilation and executi
 Unzip the Windows x64 distribution and run `jade-cli.exe help`. Keep its adjacent `native` folder with the executable. Add the distribution folder to PATH to use `jade-cli` from any working folder. Neither users nor CLI builders need Node or npm.
 
 ```text
-jade-cli doctor --config jade.json --json
+jade-cli init --profile demo --install C:\Jade2025
+jade-cli doctor --json
 jade-cli build --json
-jade-cli test --config jade.json --json
+jade-cli test .\FishTest.cls --json
 jade-cli tests list --config jade.json --json
 jade-cli source search --config jade.json --query Fish --json
 jade-cli inspect catalog --config jade.json --target working --json
@@ -33,22 +34,67 @@ Run `jade-cli build` without filenames to scan the configured project, including
 Multiple build files are supplied together to one native project build. Multiple test files run sequentially through the same shared session, with a result for each file and a failing exit status if any fails. Duplicate source arguments are removed. Quote paths containing spaces. Pass explicit filenames; wildcard expansion is not implemented. These commands use the isolated Working database and do not publish to Source.
 `--args` takes a JSON object with native inspection fields such as `classOid`, `oid`, `cursor` and `limit`. Pages are bounded to 100. Inspection defaults to Working; `--target source` explicitly selects the original database. Use the persistent service for cursor paging across requests.
 
-Configuration is a JSON object using the existing resolved engine settings:
+## Project setup
+
+Register a machine connection once, from your project folder:
+
+```powershell
+jade-cli init --profile demo --install C:\Jade2025
+jade-cli build
+jade-cli test .\FishTest.cls .\HampsterTests.cls
+```
+
+`init` creates a minimal `jade.json` suitable for source control:
+
+```json
+{ "connection": "demo" }
+```
+
+The installation path lives in your private `%LOCALAPPDATA%/JadeTools/connections.json`, outside the repository. The CLI infers the Source database as `<installPath>/system`, its INI as `<databasePath>/jade.ini`, the workspace root as the folder containing `jade.json`, and private Working storage as `%LOCALAPPDATA%/JadeTools/projects`. Working identities include workspace roots, so separate projects keep separate Working databases. Initialization writes configuration only; it does not connect, extract, compile or publish source.
+
+A missing `jade.json` is initialized automatically by `build` or `test`. With one saved connection it is selected automatically. With several, use `--profile demo`; an interactive terminal can choose from a list. With no saved connection, use `--install`, set `JADE_INSTALL` (or `JADE_HOME`), or enter the installation folder when prompted. Piped input, JSONL services and CI never prompt: ambiguous or missing setup returns a clear configuration error. An explicitly named missing `--config` file is an error, rather than an implicit new project.
+
+Reuse the connection in another project:
+
+```powershell
+cd C:\repos\another-project
+jade-cli init --profile demo
+jade-cli build
+```
+
+On a different machine, a checked-in `{ "connection": "demo" }` can be connected with `jade-cli init --install C:\Jade2025`. Existing project files are preserved byte-for-byte. Existing profile names cannot silently be repointed to another database: register a different name for a different connection.
+
+Override a machine's Source location when creating a profile, including MultiUser mode when required:
+
+```powershell
+jade-cli init --profile shared --install C:\Jade2025 --database D:\JadeData --ini D:\JadeData\jade.ini --server multiUser
+```
+
+Project overrides remain optional and relative to `jade.json`:
 
 ```json
 {
-  "installPath": "C:/Jade2025",
-  "databasePath": "C:/Jade2025/system",
-  "iniPath": "C:/Jade2025/system/jade.ini",
-  "server": "singleUser",
+  "connection": "demo",
   "schema": "ExampleSchema",
-  "workspaceRoots": ["C:/repos/example"],
-  "program": "C:/repos/example/schemas/ExampleSchema/types/ExampleTests.cls",
-  "storagePath": "C:/Users/example/AppData/Local/JadeTools/example"
+  "workspaceRoots": ["schemas"],
+  "databasePath": "../another-base"
 }
 ```
 
-Use actual absolute paths. `program` selects the test/class context; optional `files`, `methods`, `testDependencyScope`, `workingDatabaseDirectory`, `workingDatabaseGeneration` and `timeoutMilliseconds` retain existing engine meanings. Credentials are session inputs, not checked-in configuration. CLI results preserve native errors and diagnostics. Progress goes to stderr; final JSON goes to stdout. Exit codes are 0 success, 1 operation failure, 2 transport/configuration failure, and 130 reported cancellation.
+Command-line `--profile`, `--install`, `--database`, `--ini` and `--server` override the selected configuration for that invocation. Source arguments remain relative to the terminal folder. `--workspace` selects a workspace root. Full legacy JSON configurations with explicit `installPath`, `databasePath`, `iniPath`, `storagePath` and other settings continue to work. Optional `files`, `methods`, `testDependencyScope`, `workingDatabaseDirectory`, `workingDatabaseGeneration` and `timeoutMilliseconds` retain their engine meanings. Credentials are session inputs, not checked-in configuration.
+
+For isolated automation, `JADE_TOOLS_CONNECTIONS_FILE` selects an absolute private profile-file path. For example:
+
+```powershell
+$env:JADE_TOOLS_CONNECTIONS_FILE = "$env:LOCALAPPDATA\JadeTools\ci-connections.json"
+$env:JADE_TOOLS_STATE_DIRECTORY = Join-Path $env:TEMP ("jade-ci-" + [guid]::NewGuid().ToString("N"))
+jade-cli init --profile ci --install C:\Jade2025 --json
+jade-cli build --profile ci --json
+```
+
+The broker inherits these environment settings when it starts. Choose a fresh private `JADE_TOOLS_STATE_DIRECTORY` for isolated automation, as above, or run `jade-cli shutdown` before changing the profile-file location. Changing an environment variable does not reconfigure an already-running broker.
+
+CLI results preserve native errors and diagnostics. Progress goes to stderr; final JSON goes to stdout. Exit codes are 0 success, 1 operation failure, 2 transport/configuration failure, and 130 reported cancellation.
 
 When a headered project selects a dependency from another schema, that schema must also have a `.scm` or `schemaDefinitions.sec` supplied in the workspace or `config.files`; otherwise the build fails before loading, rather than using a stale database definition.
 
@@ -73,7 +119,7 @@ SingleUser Source must be available for initial backup. MultiUser Source uses na
 {"id":"2","command":"cancel","operationId":"1"}
 ```
 
-Fill `config` with resolved settings above. Events are `{id,event:"output",text}` and `{id,event:"result",result}`. Build/test results include `code`, `passed`, `cancelled`, `report`, diagnostics and test outcomes. Commands: `doctor`, `status`, `build`, `test`, `tests.list`, `source.search`, `inspect.catalog`, `inspect.instances`, `inspect.object`, `inspect.collection`, `inspect.release`, `inspect.close`, `disconnect`, `cancel`, `shutdown`.
+`config` accepts a private connection reference such as `{ "connection": "demo", "workspaceRoots": ["C:/repos/example"] }`, installation-only settings with inferred defaults, or the existing fully resolved settings. Native operations require a configured connection. Service setup is noninteractive; `{ "command": "cli", "operation": "init", "argv": ["--profile", "demo"], "cwd": "C:/repos/example" }` initializes a project without opening the database. Events are `{id,event:"output",text}` and `{id,event:"result",result}`. Build/test results include `code`, `passed`, `cancelled`, `report`, diagnostics and test outcomes. Commands: `doctor`, `status`, `build`, `test`, `tests.list`, `source.search`, `inspect.catalog`, `inspect.instances`, `inspect.object`, `inspect.collection`, `inspect.release`, `inspect.close`, `disconnect`, `cancel`, `shutdown`.
 
 Inspection sessions bind target/configuration identity. Close an old session before changing target; object identities and cursors never transfer between Source and Working. Client transport loss cancels its active jobs and closes its owned helper/inspection sessions. Successful idle compile/test state can remain warm in the broker.
 
@@ -95,11 +141,15 @@ Tests cover configuration and positional arguments, schema-qualified discovery, 
 
 Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade vendor DLLs, databases, credentials or generated evidence belong in Git. The previous Node implementation is preserved on the `codex/agent/ci-releases` branch (with a local `codex/node-cli-baseline` checkpoint) for comparison; it is not included in the native distribution.
 
+
 ## GitHub builds and releases
 
 Windows CI builds and tests the native executable, verifies a portable copy outside the checkout, and creates `jade-cli-win-x64.zip`, `jade-cli.exe` and `SHA256SUMS`. The ZIP contains the complete native runtime and its hash manifest; the standalone EXE still needs the adjacent native helpers for connected operations. There is no npm runtime release.
 
-Release tags must match the native version and refer to a commit on the reviewed `main` branch. The release job verifies downloaded artifacts before publishing. `SHA256SUMS` covers the EXE and ZIP; `distribution.json` records the hashes of the executable and its runtime files. No release or merge is performed by an ordinary build.
+Pull requests run validation once. After an approved merge to `main`, a successful build publishes a new native version automatically; an already-published version remains unchanged. Bump the native version to publish a new CLI release. Only protected-main pushes publish; tag pushes do not start a competing publisher. Before retaining an existing published version, the release job verifies its tag is in reviewed `main` history and checks its downloaded EXE, ZIP, checksums and native manifest. The release job verifies downloaded artifacts and finishes uploading a draft before publication. `SHA256SUMS` covers the EXE and ZIP; `distribution.json` records the hashes of the executable and its runtime files.
+
+Bot PR creation runs separately from the full build. Squash auto-merge waits for the required owner approval, checks and resolved discussions; feature branches are deleted after merge. GitHub may require approval to start workflows on a newly bot-created PR.
+
 
 ## Architecture diagram
 

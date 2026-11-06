@@ -1,4 +1,5 @@
 #include "CommandLine.hpp"
+#include "ConnectionProfiles.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -27,7 +28,10 @@ int main() {
             << R"({"installPath":"runtime","databasePath":"base","workspaceRoots":["src"]})";
         std::ofstream(root / "src" / "Fish.cls")
             << "schemaDefinition\nPets subschemaOf RootSchema partialDefinition;";
-        CommandLine cli;
+        ConnectionProfiles profiles(root / "machine" / "connections.json");
+        profiles.save("one", {{"installPath", (root / "one").string()}});
+        profiles.save("two", {{"installPath", (root / "two").string()}});
+        CommandLine cli(profiles.file());
         auto project = cli.prepare("build", {}, root / "src" / "nested");
         require(project.projectBuild, "bare build must select project");
         require(project.config["databasePath"] == (root / "base").string(),
