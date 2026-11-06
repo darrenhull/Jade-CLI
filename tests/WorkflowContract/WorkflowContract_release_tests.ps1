@@ -12,6 +12,8 @@ $scriptText = $match.Groups[1].Value -replace '(?m)^          ', ''
 $scriptText=$scriptText.Replace('./scripts/PublishedNativeRelease.ps1',("'"+(Join-Path $root 'scripts/PublishedNativeRelease.ps1').Replace("'","''")+"'"))
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('jade-release-contract-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $temporary 'release'),(Join-Path $temporary 'payload') | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $temporary '.github/release-notes') -Force | Out-Null
+[IO.File]::WriteAllText((Join-Path $temporary '.github/release-notes/0.2.0.md'), 'ScratchFeatureFixture: Run Jade scratch code without publishing a class.')
 [IO.File]::WriteAllText((Join-Path $temporary 'payload/distribution.json'), '{"runtime":"native-cpp","packageVersion":"0.2.0"}')
 [IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $temporary 'payload'),(Join-Path $temporary 'release/jade-cli-win-x64.zip'))
 foreach ($name in @('jade-cli.exe','SHA256SUMS')) { [IO.File]::WriteAllText((Join-Path $temporary ('release/'+$name)),'fixture') }
@@ -61,6 +63,9 @@ function gh {
             return
         }
         'create' {
+            if ($values -contains '--generate-notes' -or $values -notcontains '--notes-file') { throw 'Consumer releases require explicit feature notes, not generated development history.' }
+            $noteFile = $values[[array]::IndexOf($values,'--notes-file')+1]
+            if ([IO.File]::ReadAllText($noteFile) -notmatch 'ScratchFeatureFixture') { throw 'Version-specific consumer feature notes were not used.' }
             if ($values -contains '--verify-tag' -or $values -notcontains '--target' -or $values[[array]::IndexOf($values,'--target')+1] -ne $env:GITHUB_SHA) { throw 'New release must target the approved main SHA without requiring a pre-created tag.' }
             if ($values -notcontains '--draft') { throw 'A new release must remain a draft until all assets are uploaded.' }
             $script:created++;$script:exists=$true;$script:draft=$true;$script:tagTarget=$env:GITHUB_SHA
@@ -110,6 +115,11 @@ try {
     $script:failInitialUpload=$false
     & ([scriptblock]::Create($scriptText))
     if ($script:draft -or $script:edited -ne 3) { throw 'A first-upload interruption was not safely resumable.' }
+    Remove-Item -LiteralPath (Join-Path $temporary '.github/release-notes/0.2.0.md')
+    & ([scriptblock]::Create($scriptText)) # Published releases stay immutable without checkout notes.
+    $script:exists=$false;$script:tagTarget=''
+    $rejected=$false;try { & ([scriptblock]::Create($scriptText)) } catch { $rejected=$_.Exception.Message -match 'consumer release notes' }
+    if(!$rejected){throw 'A new release without version-specific consumer notes was accepted.'}
     Write-Output 'CLI main-release targeting, immutable published versions, retry and draft-resume contracts passed.'
 } finally {
     Set-Location -LiteralPath $previous
