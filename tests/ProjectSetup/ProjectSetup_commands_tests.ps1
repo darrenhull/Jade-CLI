@@ -2,6 +2,8 @@ param([string]$Distribution=(Join-Path $PSScriptRoot '../../dist/jade-cli-win-x6
 $ErrorActionPreference='Stop'
 $root=Join-Path ([IO.Path]::GetTempPath()) ('jade-init-smoke-'+[guid]::NewGuid().ToString('N'))
 $exe=(Resolve-Path (Join-Path $Distribution 'jade-cli.exe')).Path
+$expectedVersion=(Get-Content -LiteralPath (Join-Path $Distribution 'distribution.json') -Raw|ConvertFrom-Json).packageVersion
+if($expectedVersion -notmatch '^\d+\.\d+\.\d+$'){throw 'The tested distribution must declare a stable native CLI version'}
 $oldProfiles=$env:JADE_TOOLS_CONNECTIONS_FILE;$oldState=$env:JADE_TOOLS_STATE_DIRECTORY;$oldInstall=$env:JADE_INSTALL;$oldHome=$env:JADE_HOME;$previous=(Get-Location).Path
 function Assert-Result($value,$message){if(!$value){throw $message}}
 . (Join-Path $PSScriptRoot '../../scripts/ProjectSetupCleanup.ps1')
@@ -23,7 +25,7 @@ try{
  $again=& $exe init --json|ConvertFrom-Json
  Assert-Result ($LASTEXITCODE -eq 0 -and !$again.created -and [Convert]::ToBase64String($bytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $first 'jade.json')))) 'Init overwrote existing project'
  $doctor=& $exe doctor --json|ConvertFrom-Json
- Assert-Result ($LASTEXITCODE -eq 0 -and $doctor.runtime -eq $runtime -and $doctor.sdkVersion -eq '0.3.0') 'Minimal profile doctor failed'
+ Assert-Result ($LASTEXITCODE -eq 0 -and $doctor.runtime -eq $runtime -and $doctor.sdkVersion -eq $expectedVersion) ('Minimal profile doctor failed: expected version '+$expectedVersion+'; exit='+$LASTEXITCODE+'; result='+($doctor|ConvertTo-Json -Depth 8 -Compress))
  $second=Join-Path $root 'second';New-Item -ItemType Directory -Path $second|Out-Null;Set-Location -LiteralPath $second
  @'
 schemaDefinition
