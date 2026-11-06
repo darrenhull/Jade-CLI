@@ -1,0 +1,19 @@
+{
+  "libraries": {
+    "jlnintp.dll": "24b922978b7914ba69308e1e323a82ff0f8c6b0b2283664b6211702273dd2c23",
+    "jom.dll": "e2fb2ffef73df3c6af6ebc7a226f3ea9544660fced9e3c9c3fe28af09d088b33",
+    "jomos.dll": "1e6d5ff08ae27239d491c493bb8e51529f42c1cd4f9802d4223530446c128e53",
+    "jomsupp.dll": "3916cbd27669e6f4b21efd90b22cd4700229afa33cc868e87e07eb920f90e7ac"
+  },
+  "symbols": {
+    "BreakpointManager::incRefCount": 361008,
+    "Context::setBreakpointManager": 409552,
+    "BreakpointManager::BreakpointManager": 88992,
+    "getContext": 9584,
+    "xheap_INT": 519920,
+    "Context::getBreakpointManager": 387424
+  },
+  "layouts": {
+    "Debugger.waiting": 704
+  }
+}
