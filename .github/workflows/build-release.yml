@@ -25,10 +25,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Build and test native C++ CLI
         run: ./scripts/build-native-cli.ps1
-      - name: Test verified native release updates
-        run: Get-ChildItem tests/NativeReleaseUpdater -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
+      - name: Test native workflow boundaries
+        run: Get-ChildItem tests/WorkflowContract -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
       - name: Test native distribution packaging
-        run: ./tests/NativeDistribution/NativeDistribution_package_tests.ps1
+        run: Get-ChildItem tests/NativeDistribution -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
       - name: Smoke test outside checkout without Node
         run: ./scripts/smoke-native-cli.ps1
       - name: Create native release assets
@@ -55,20 +55,9 @@ jobs:
           - Hosted checks use committed owned helper executables; native connected Jade tests require the separately licensed runtime and a disposable database and are not claimed here.
           '@ >> $env:GITHUB_STEP_SUMMARY
 
-  developer-tools:
-    runs-on: windows-2022
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: '24.22.1'
-      - name: Test development-only MCP packaging and PR automation
-        run: node --test build-tools/tests/*/*_tests.test.js tests/AgentPullRequest/*_tests.test.js tests/release-ancestry/*_tests.test.js
-
   open-agent-pr:
     if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/')
-    needs: [build, developer-tools]
+    needs: build
     permissions:
       contents: read
       pull-requests: write
@@ -80,7 +69,7 @@ jobs:
 
   release:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    needs: [build, developer-tools, release-guard]
+    needs: [build, release-guard]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

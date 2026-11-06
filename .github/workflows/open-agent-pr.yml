@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   open:
-    if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/') && contains(fromJSON('["darrenhull/Jade-CLI","darrenhull/Jade-VSCode-Extension","darrenhull/Jade-Local-MCP"]'), github.repository)
+    if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/') && github.repository == 'darrenhull/Jade-CLI'
     runs-on: windows-latest
     timeout-minutes: 5
     outputs:
@@ -39,7 +39,7 @@ jobs:
           SOURCE_PR: ${{ inputs.source_pr }}
           REVIEWER: ${{ inputs.reviewer }}
         run: |
-          $allowed = @('darrenhull/Jade-CLI', 'darrenhull/Jade-VSCode-Extension', 'darrenhull/Jade-Local-MCP')
+          $allowed = @('darrenhull/Jade-CLI')
           if ($env:GITHUB_EVENT_NAME -ne 'push' -or $env:GITHUB_ACTOR -ne 'darrenhull' -or $allowed -notcontains $env:GITHUB_REPOSITORY -or $env:GITHUB_REF -notmatch '^refs/heads/codex/agent/[A-Za-z0-9][A-Za-z0-9._/-]*$') {
             throw 'Only the owner pushing an approved repository agent branch can open this pull request.'
           }

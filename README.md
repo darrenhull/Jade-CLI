@@ -2,7 +2,7 @@
 
 `jade-cli.exe` 0.2.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
 
-Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. VS Code and the official MCP adapter communicate with this CLI through its JSONL service; editor JavaScript and the MCP protocol adapter are separate from the native engine.
+Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. Terminal commands and JSONL service requests use the same native implementation.
 
 ## Commands
 
@@ -52,7 +52,7 @@ Use actual absolute paths. `program` selects the test/class context; optional `f
 
 ## Native ownership and private state
 
-Compile/test loads local changes into an independent Working database. Tests execute afresh. RootSchema metadata is editor metadata, not executable state. Public publication commands are not exposed in this release.
+Compile/test loads local changes into an independent Working database. Tests execute afresh; reusing a native session does not reuse old test results. Public publication commands are not exposed in this release.
 
 An authenticated per-user named-pipe broker owns native processes and retains a warm compile/test session. Its credential directory has a Windows owner-restricted ACL; the local protocol also requires a random token. Clients do not receive tokens in output. Native jobs currently serialize globally, including independent Working bases: safe ownership takes precedence over parallel execution.
 
@@ -62,7 +62,7 @@ Default broker state: `%LOCALAPPDATA%/JadeTools/broker-v2-native`. Set `JADE_TOO
 
 SingleUser Source must be available for initial backup. MultiUser Source uses native quiesced online backup: clients stay connected while updates briefly pause. Source server mode and original INI are not rewritten. Inspection is native read-only with security enforced. Test/application execution can mutate Working data.
 
-## Extension and MCP integration
+## JSONL service
 
 `jade-cli service --stdio` accepts JSONL:
 
@@ -71,13 +71,13 @@ SingleUser Source must be available for initial backup. MultiUser Source uses na
 {"id":"2","command":"cancel","operationId":"1"}
 ```
 
-Fill `config` with resolved settings above. Events are `{id,event:"output",text}` and `{id,event:"result",result}`. Build/test return the existing `startWorking` completion DTO, including `code`, `passed`, `cancelled`, `report`, diagnostics and test outcomes. Commands: `doctor`, `status`, `build`, `test`, `tests.list`, `source.search`, `inspect.catalog`, `inspect.instances`, `inspect.object`, `inspect.collection`, `inspect.release`, `inspect.close`, `disconnect`, `cancel`, `shutdown`.
+Fill `config` with resolved settings above. Events are `{id,event:"output",text}` and `{id,event:"result",result}`. Build/test results include `code`, `passed`, `cancelled`, `report`, diagnostics and test outcomes. Commands: `doctor`, `status`, `build`, `test`, `tests.list`, `source.search`, `inspect.catalog`, `inspect.instances`, `inspect.object`, `inspect.collection`, `inspect.release`, `inspect.close`, `disconnect`, `cancel`, `shutdown`.
 
 Inspection sessions bind target/configuration identity. Close an old session before changing target; object identities and cursors never transfer between Source and Working. Client transport loss cancels its active jobs and closes its owned helper/inspection sessions. Successful idle compile/test state can remain warm in the broker.
 
-Internal adapter gateways `native.run` and `helper inspect|debug|compiler [session.json]` preserve existing native protocols. Utilities are restricted to `jadclient`, `jadloadb`, `jdbutilb` and `jdbadmin` in the configured installation. These are trusted desktop interfaces, not unrestricted MCP tools or publication approval mechanisms. The helper gateway forwards native stdio under a broker lease. Existing version-pinned debugger ABI checks remain active. Arbitrary expressions, GUI hosting and unrestricted attach are not added.
+Native gateways `native.run` and `helper inspect|debug|compiler [session.json]` preserve Jade's native protocols. Utilities are restricted to `jadclient`, `jadloadb`, `jdbutilb` and `jdbadmin` in the configured installation. These are trusted local interfaces; callers remain responsible for authorizing Source writes. The helper gateway forwards native stdio under a broker lease. Version-pinned debugger ABI checks remain active. Arbitrary expressions, GUI hosting and unrestricted attach are not added.
 
-Consumers launch `jade-cli.exe service --stdio`; they do not import an execution SDK. `{ "command": "cli", "operation": "build", "argv": [], "cwd": "C:/repos/example" }` uses the same configuration discovery and command handling as the terminal. `prepare` returns resolved configuration metadata without connecting to a database. The MCP repository owns the official MCP protocol adapter.
+Protocol clients launch `jade-cli.exe service --stdio`. `{ "command": "cli", "operation": "build", "argv": [], "cwd": "C:/repos/example" }` uses the same configuration discovery and command handling as the terminal. `prepare` returns resolved configuration metadata without connecting to a database.
 
 ## Development and verification
 
@@ -97,7 +97,7 @@ Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade
 
 Windows CI builds and tests the native executable, verifies a portable copy outside the checkout, and creates `jade-cli-win-x64.zip`, `jade-cli.exe` and `SHA256SUMS`. The ZIP contains the complete native runtime and its hash manifest; the standalone EXE still needs the adjacent native helpers for connected operations. There is no npm runtime release.
 
-Release tags must match the native version and refer to a commit on the reviewed default branch. The release job verifies downloaded artifacts before publishing. Consumers pin the native distribution and verify its manifest and checksums before packaging. Dependency updates remain reviewable pull requests; user approval is required. No release or merge is performed by an ordinary build.
+Release tags must match the native version and refer to a commit on the reviewed `main` branch. The release job verifies downloaded artifacts before publishing. `SHA256SUMS` covers the EXE and ZIP; `distribution.json` records the hashes of the executable and its runtime files. No release or merge is performed by an ordinary build.
 
 ## Architecture diagram
 

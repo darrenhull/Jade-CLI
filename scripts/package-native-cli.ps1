@@ -1,7 +1,7 @@
 param([string]$Directory=(Join-Path $PSScriptRoot '../dist/jade-cli-win-x64'),[string]$OutputDirectory=(Join-Path $PSScriptRoot '../dist'),[string]$Tag)
 $ErrorActionPreference='Stop'
 $releaseTag=$Tag
-. (Join-Path $PSScriptRoot 'update-native-cli.ps1')
+. (Join-Path $PSScriptRoot 'NativeDistribution.ps1')
 function New-NativePackage([string]$Directory,[string]$OutputDirectory,[string]$Tag){
  $manifest=Test-NativeDistribution $Directory
  if($Tag -and $Tag -ne ('v'+$manifest.packageVersion)){throw 'Release tag must exactly match the native CLI version.'}

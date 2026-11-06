@@ -7,10 +7,6 @@ coverage/
 .env.*
 !.env.example
 *.exe
-!sdk/native/jade-test-helper.exe
-!sdk/native/jade-inspect-helper.exe
-!sdk/native/jade-debug-helper.exe
-!sdk/native/jade-native-helper.exe
 !native-bin/*.exe
 *.dll
 *.pdb
@@ -24,7 +20,6 @@ type-cache/
 system-types/
 runtime/
 vendor/
-!sdk/vendor/
 backups/
 reports/
 secrets/

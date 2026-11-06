@@ -2,14 +2,14 @@
 
 ## Architecture and responsibilities
 
-This repository owns the native C++ jade-cli executable, per-user broker, build/test orchestration, owned C++ helpers and shared release/packaging automation. Jade owns compilation, object semantics, persistence and native execution. Consumers use the JSONL service; the CLI must not embed or launch Node, JavaScript or Python. Development-only automation is separate from the distributed native runtime.
+This repository owns the native C++ jade-cli executable, per-user broker, build/test orchestration, owned C++ helpers and CLI release/packaging automation. Jade owns compilation, object semantics, persistence and native execution. Protocol clients use the JSONL service; the CLI must not embed or launch Node, JavaScript or Python. Keep this repository focused on the CLI and its integration with Jade.
 
-- Preserve coordinated native/SingleUser ownership across CLI, extension and MCP clients. Consumers must not introduce an independent execution path.
+- Preserve coordinated native/SingleUser ownership across terminal and JSONL clients through one broker.
 - Review discovery, dependency closure, schema ancestry, structural changes and successful-input inventories together, including test-class switches and failure recovery.
 - Keep ABI/version assumptions explicit. Do not guess native signatures or replace native semantics with a permissive custom checker.
 - Keep inspection read-only; bind sessions/OIDs/cursors to their selected targets and retain native resources/configuration until actual process exit.
-- Check public exports, framing, broker authentication/fingerprints, bounded output and cancellation against both consumers.
-- Shared native release automation must work without a sibling checkout and must not expose arbitrary commands.
+- Check command and JSONL contracts, framing, broker authentication/fingerprints, bounded output and cancellation across concurrent clients.
+- Native build and release automation must work without a sibling checkout and must not expose arbitrary commands.
 
 ## Engineering approach
 
@@ -18,7 +18,7 @@ This repository owns the native C++ jade-cli executable, per-user broker, build/
 - Keep one top-level class per source file, named for that class. Keep executable entry points thin. Cohesive stateless functions are appropriate; avoid artificial classes.
 - Store native tests under tests/{Class}/{Class}_{method}_tests.cpp and PowerShell automation tests under tests/{Module}/{Module}_{method}_tests.ps1. Keep tests grouped by their owning class or module; share realistic fixtures. Do not disable assertions in test builds.
 - Apply SOLID at actual boundaries: separate transport, configuration, orchestration, native execution and presentation; inject process/filesystem/network dependencies where tests need control.
-- Apply DRY across repositories: the native CLI owns native semantics, shared sessions and dependency selection. Consumers use the versioned JSONL contract and verified native distribution. Share development-only automation without shipping a second execution engine.
+- Apply DRY within the CLI: share process ownership, security, configuration, sessions and dependency selection instead of implementing separate command and service engines.
 - Prefer maintained libraries and official SDKs for established protocols. Keep custom glue small and readable; avoid speculative abstractions and catch-and-ignore fallbacks.
 - Run focused tests first, then relevant regression/build/package checks. Default tests must not open a developer's Jade database; connected tests require explicit opt-in, disposable validated fixtures and cleanup of owned resources only.
 - Review the final diff for unintended files, secrets, stale comments and behavior changes. Document the final behavior, validation and practical limitations.
@@ -31,7 +31,7 @@ This repository owns the native C++ jade-cli executable, per-user broker, build/
 
 ## Correctness and compatibility
 
-- Preserve public commands, SDK/event/result contracts, native error codes, cancellation, diagnostics, source locations and individual test outcomes. Incomplete or failed operations must not appear successful.
+- Preserve public commands, JSONL/event/result contracts, native error codes, cancellation, diagnostics, source locations and individual test outcomes. Incomplete or failed operations must not appear successful.
 - Resolve configuration predictably and preserve schema-qualified identities. A same-named class in another schema is a different declaration.
 - Preserve native source formats, encoding and meaningful ordering. Avoid broad transformations and invented Jade metadata.
 - Build/test against saved local files and their dependencies, including unpublished classes. Establish reusable baselines only after successful native loads and invalidate stale claims after failures or structural changes.
@@ -55,10 +55,10 @@ This repository owns the native C++ jade-cli executable, per-user broker, build/
 
 ## Builds, releases and maintenance
 
-- Independent checkouts must build from committed inputs and lockfiles. The pinned CLI archive is an intentional consumer build dependency.
+- Independent checkouts must build from committed native inputs and declared toolchain/dependency versions.
 - Exclude credentials, user configuration, databases, caches, logs and research notes from Git. Track requested diagrams and build-required source, tests and notices.
 - Pin toolchains/dependencies and test the actual portable artifact outside the checkout without Node on PATH.
-- Validate PRs without publishing. Tags must match package versions and reference reviewed-default-branch commits. Do not merge PRs or create release tags without authorization.
+- Validate PRs without publishing. Tags must match the native version and reference reviewed commits on `main`. Do not merge PRs or create release tags without authorization.
 - Keep README, examples, capabilities and diagrams aligned with implemented behavior. Distinguish hosted CI from connected checks requiring the licensed Jade runtime.
 
 ## Code Review Rules
@@ -67,7 +67,7 @@ These rules are not exhaustive. Review the complete change and its affected call
 
 - Trace success, failure, cancellation and repeated operations across boundaries. Check partial failures, races, resource leaks, stale state and recovery.
 - Ask whether the tests detect the actual failure, especially where native behavior differs from a mock. Flag misleading green checks and missing meaningful behavioral coverage.
-- Check compatibility of the committed CLI archive, consumer lock, native helpers, runtime assumptions and deployed artifacts.
+- Check compatibility of the native executable, helpers, Jade ABI/runtime assumptions and release artifacts.
 - Check that Source cannot be changed by build/test/read-only inspection and that native ownership and target identity cannot be bypassed or confused.
 - Check performance evidence and ensure ordinary navigation, single-file operations and paged lookups do not unexpectedly trigger expensive project-wide work.
 - Check release/update automation for unreviewed publication, unverified downloads, stale integrity and silently skipped failures.
