@@ -87,9 +87,12 @@ For isolated automation, `JADE_TOOLS_CONNECTIONS_FILE` selects an absolute priva
 
 ```powershell
 $env:JADE_TOOLS_CONNECTIONS_FILE = "$env:LOCALAPPDATA\JadeTools\ci-connections.json"
+$env:JADE_TOOLS_STATE_DIRECTORY = Join-Path $env:TEMP ("jade-ci-" + [guid]::NewGuid().ToString("N"))
 jade-cli init --profile ci --install C:\Jade2025 --json
 jade-cli build --profile ci --json
 ```
+
+The broker inherits these environment settings when it starts. Choose a fresh private `JADE_TOOLS_STATE_DIRECTORY` for isolated automation, as above, or run `jade-cli shutdown` before changing the profile-file location. Changing an environment variable does not reconfigure an already-running broker.
 
 CLI results preserve native errors and diagnostics. Progress goes to stderr; final JSON goes to stdout. Exit codes are 0 success, 1 operation failure, 2 transport/configuration failure, and 130 reported cancellation.
 

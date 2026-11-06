@@ -41,6 +41,11 @@ typeSources
  $request=@{id='prepare';command='prepare';operation='build';argv=@('Pet.cls');cwd=$second}|ConvertTo-Json -Compress
  $prepared=@($request|& $exe service --stdio|ForEach-Object{$_|ConvertFrom-Json}|Where-Object event -eq result)[0].result
  Assert-Result ($prepared.passed -and $prepared.prepared.config.databasePath -eq (Join-Path $runtime 'system') -and $prepared.prepared.config.workspaceRoots[0] -eq $second) 'Service did not share inferred configuration'
+ $third=Join-Path $root 'test-auto';New-Item -ItemType Directory -Path $third|Out-Null
+ Copy-Item -LiteralPath (Join-Path $second 'Pet.cls') -Destination $third
+ Set-Location -LiteralPath $third
+ $testFailed=& $exe test Pet.cls --json 2> (Join-Path $root 'test-progress.txt')|ConvertFrom-Json
+ Assert-Result ($LASTEXITCODE -ne 0 -and !$testFailed.passed -and (Test-Path jade.json)) 'Missing test project did not auto-initialize before native validation'
  Write-Output 'ProjectSetup CLI explicit init, auto-build setup, tiny JSON, unchanged file, doctor and service defaults: PASS'
 }finally{
  if(Test-Path -LiteralPath $exe){& $exe shutdown --json|Out-Null}
