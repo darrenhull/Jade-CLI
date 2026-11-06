@@ -1,6 +1,7 @@
 #include "runtime.hpp"
 #include "protocol.hpp"
 #include "security.hpp"
+#include "CatalogPage.hpp"
 #include <jomoid.hpp>
 ProtocolOutput protocolOutput;
 void emit(json value)
@@ -16,6 +17,7 @@ struct Inspector
     int developmentLicences = 0;
     std::map<std::string, json> classCache;
     std::map<std::string, bool> filterCache;
+    std::map<bool, CatalogPage> catalogPages;
     struct Cursor
     {
         Oid iterator{}, collection{}, classOid{};
@@ -154,6 +156,23 @@ struct Inspector
         std::sort(schemas.begin(), schemas.end(),
                   [](const json &a, const json &b) { return a["name"] < b["name"]; });
         return {{"schemas", schemas}, {"readOnly", true}};
+    }
+    json catalogRequest(const json &request)
+    {
+        const auto includeSystem = request.value("includeSystem", false);
+        if (!CatalogPage::requested(request))
+        {
+            // Existing local callers still receive the complete schema tree.
+            catalogPages.erase(includeSystem);
+            return catalog(includeSystem);
+        }
+        CatalogPage::validate(request);
+        if (request.value("refresh", false))
+            catalogPages.clear();
+        auto page = catalogPages.find(includeSystem);
+        if (page == catalogPages.end())
+            page = catalogPages.emplace(includeSystem, CatalogPage(catalog(includeSystem))).first;
+        return page->second.page(request);
     }
     std::string string(Param &value)
     {
@@ -547,7 +566,7 @@ struct Inspector
     {
         const auto command = request.value("command", "");
         if (command == "catalog")
-            return catalog(request.value("includeSystem", false));
+            return catalogRequest(request);
         if (command == "object")
             return object(parseOid(request.at("oid")));
         if (command == "instances")

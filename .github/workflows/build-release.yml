@@ -1,0 +1,91 @@
+name: Build, test and release native CLI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build and test native C++ CLI
+        run: ./scripts/build-native-cli.ps1
+      - name: Test native workflow boundaries
+        run: Get-ChildItem tests/WorkflowContract -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
+      - name: Test native distribution packaging
+        run: Get-ChildItem tests/NativeDistribution -Filter '*_tests.ps1' | ForEach-Object { & $_.FullName }
+      - name: Smoke test outside checkout without Node
+        run: ./scripts/smoke-native-cli.ps1
+      - name: Create native release assets
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: ./scripts/package-native-cli.ps1 -Tag $env:RELEASE_TAG
+      - name: Retain tested distribution
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
+        with:
+          name: jade-cli-windows-${{ github.sha }}
+          path: |
+            dist/jade-cli-win-x64.zip
+            dist/jade-cli.exe
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1
+      - name: Record native test scope
+        run: |
+          @'
+          ## Native Jade CLI verification
+          - Native C++ contract, process, broker and packaging tests passed.
+          - The portable executable worked outside the checkout without Node.
+          - The distribution has no JavaScript engine, embedded Node or Python.
+          - Hosted checks use committed owned helper executables; native connected Jade tests require the separately licensed runtime and a disposable database and are not claimed here.
+          '@ >> $env:GITHUB_STEP_SUMMARY
+
+  open-agent-pr:
+    if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/')
+    needs: build
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/open-agent-pr.yml
+
+  release-guard:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    uses: ./.github/workflows/release-ancestry.yml
+
+  release:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    needs: [build, release-guard]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7, Node 24
+        with:
+          name: jade-cli-windows-${{ github.sha }}
+          path: release
+      - name: Verify downloaded native assets
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+      - name: Publish tested native GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: gh release create "$RELEASE_TAG" release/jade-cli-win-x64.zip release/jade-cli.exe release/SHA256SUMS --verify-tag --title "Jade CLI $RELEASE_TAG" --generate-notes --notes "Download jade-cli-win-x64.zip and keep native helpers with jade-cli.exe. Native C++, no Node/Python runtime. Connected operations require an installed compatible licensed Jade runtime."

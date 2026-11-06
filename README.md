@@ -1,12 +1,12 @@
-# Jade tools CLI and local SDK
+# Jade CLI — native C++
 
-`jade-tools-cli` 0.1.0 runs the existing native Jade build/test engine independently of VS Code. It reuses the JavaScript orchestration and C++ helpers from Jade Native Runner 0.10.1. Jade owns compilation, object semantics and test lifecycle. A compatible installed Windows Jade runtime is required; vendor DLLs are not distributed here.
+`jade-cli.exe` 0.2.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
 
-This is a local development package, not an npm-published release. The package includes the shared SDK under `sdk/`, native helpers and the `jade-cli` executable. `@jade-local-tools/sdk` is its internal SDK identity; no separate published dependency is required. The extension consumes a pinned packed copy without sibling-checkout imports.
+Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. Terminal commands and JSONL service requests use the same native implementation.
 
 ## Commands
 
-Unzip the Windows x64 distribution and run `jade-cli.exe help`. Keep its adjacent `bin` and `sdk` folders together with the executable. No separate Node.js installation is needed. Add that distribution folder to PATH to use `jade-cli` from another working folder. Developers can also run `node bin/jade-cli.js help` from a source checkout.
+Unzip the Windows x64 distribution and run `jade-cli.exe help`. Keep its adjacent `native` folder with the executable. Add the distribution folder to PATH to use `jade-cli` from any working folder. Neither users nor CLI builders need Node or npm.
 
 ```text
 jade-cli doctor --config jade.json --json
@@ -50,19 +50,21 @@ Configuration is a JSON object using the existing resolved engine settings:
 
 Use actual absolute paths. `program` selects the test/class context; optional `files`, `methods`, `testDependencyScope`, `workingDatabaseDirectory`, `workingDatabaseGeneration` and `timeoutMilliseconds` retain existing engine meanings. Credentials are session inputs, not checked-in configuration. CLI results preserve native errors and diagnostics. Progress goes to stderr; final JSON goes to stdout. Exit codes are 0 success, 1 operation failure, 2 transport/configuration failure, and 130 reported cancellation.
 
+When a headered project selects a dependency from another schema, that schema must also have a `.scm` or `schemaDefinitions.sec` supplied in the workspace or `config.files`; otherwise the build fails before loading, rather than using a stale database definition.
+
 ## Native ownership and private state
 
-Compile/test loads local changes into an independent Working database. Tests execute afresh. RootSchema metadata is editor metadata, not executable state. Public publication commands are not exposed in this release.
+Compile/test loads local changes into an independent Working database. Tests execute afresh; reusing a native session does not reuse old test results. Public publication commands are not exposed in this release.
 
 An authenticated per-user named-pipe broker owns native processes and retains a warm compile/test session. Its credential directory has a Windows owner-restricted ACL; the local protocol also requires a random token. Clients do not receive tokens in output. Native jobs currently serialize globally, including independent Working bases: safe ownership takes precedence over parallel execution.
 
 A held inspector/debugger helper lease returns an explicit busy result to another client rather than terminating debugging or waiting indefinitely. Close that session before compiling. The broker releases warm runtime handles before external tools. Surviving native PIDs block broker restart until ownership is resolved. It never terminates unrelated Jade applications.
 
-Default broker state: `%LOCALAPPDATA%/JadeTools/broker-v1`. Set `JADE_TOOLS_STATE_DIRECTORY` to a separate private directory for isolated tests. `disconnect` releases retained native sessions; `shutdown` closes the broker and its owned helpers. These affect clients sharing that broker.
+Default broker state: `%LOCALAPPDATA%/JadeTools/broker-v2-native`. Set `JADE_TOOLS_STATE_DIRECTORY` to a separate private directory for isolated tests. `disconnect` releases retained native sessions; `shutdown` closes the broker and its owned helpers. These affect clients sharing that broker. The native broker has a separate namespace from the archived Node implementation.
 
 SingleUser Source must be available for initial backup. MultiUser Source uses native quiesced online backup: clients stay connected while updates briefly pause. Source server mode and original INI are not rewritten. Inspection is native read-only with security enforced. Test/application execution can mutate Working data.
 
-## Extension and SDK integration
+## JSONL service
 
 `jade-cli service --stdio` accepts JSONL:
 
@@ -71,26 +73,36 @@ SingleUser Source must be available for initial backup. MultiUser Source uses na
 {"id":"2","command":"cancel","operationId":"1"}
 ```
 
-Fill `config` with resolved settings above. Events are `{id,event:"output",text}` and `{id,event:"result",result}`. Build/test return the existing `startWorking` completion DTO, including `code`, `passed`, `cancelled`, `report`, diagnostics and test outcomes. Commands: `doctor`, `status`, `build`, `test`, `tests.list`, `source.search`, `inspect.catalog`, `inspect.instances`, `inspect.object`, `inspect.collection`, `inspect.release`, `inspect.close`, `disconnect`, `cancel`, `shutdown`.
+Fill `config` with resolved settings above. Events are `{id,event:"output",text}` and `{id,event:"result",result}`. Build/test results include `code`, `passed`, `cancelled`, `report`, diagnostics and test outcomes. Commands: `doctor`, `status`, `build`, `test`, `tests.list`, `source.search`, `inspect.catalog`, `inspect.instances`, `inspect.object`, `inspect.collection`, `inspect.release`, `inspect.close`, `disconnect`, `cancel`, `shutdown`.
 
 Inspection sessions bind target/configuration identity. Close an old session before changing target; object identities and cursors never transfer between Source and Working. Client transport loss cancels its active jobs and closes its owned helper/inspection sessions. Successful idle compile/test state can remain warm in the broker.
 
-Internal adapter gateways `native.run` and `helper inspect|debug|compiler [session.json]` preserve existing native protocols. Utilities are restricted to `jadclient`, `jadloadb`, `jdbutilb` and `jdbadmin` in the configured installation. These are trusted desktop interfaces, not unrestricted MCP tools or publication approval mechanisms. The helper gateway forwards native stdio under a broker lease. Existing version-pinned debugger ABI checks remain active. Arbitrary expressions, GUI hosting and unrestricted attach are not added.
+Native gateways `native.run` and `helper inspect|debug|compiler [session.json]` preserve Jade's native protocols. Utilities are restricted to `jadclient`, `jadloadb`, `jdbutilb` and `jdbadmin` in the configured installation. These are trusted local interfaces; callers remain responsible for authorizing Source writes. The helper gateway forwards native stdio under a broker lease. Version-pinned debugger ABI checks remain active. Arbitrary expressions, GUI hosting and unrestricted attach are not added.
 
-The CommonJS SDK exports `JadeEngine` and `sourceFiles`; the package's `./client` export provides `openClient()` for shared broker access. Production multi-client native operations should use the broker. No MCP server is implemented here.
+Protocol clients launch `jade-cli.exe service --stdio`. `{ "command": "cli", "operation": "build", "argv": [], "cwd": "C:/repos/example" }` uses the same configuration discovery and command handling as the terminal. `prepare` returns resolved configuration metadata without connecting to a database.
 
-## Development
+## Development and verification
 
-### Standalone Windows distribution
+Build with the Visual Studio 2022 x64 C++ toolchain and Windows SDK:
 
-`npm run package:standalone` builds `dist/jade-cli-win-x64/jade-cli.exe` and `dist/jade-cli-win-x64.zip`. The executable contains the Node runtime using the official Node single-executable application mechanism; JavaScript/native helper sidecars remain in `bin` and `sdk`. The ZIP is the complete deployable folder. It requires the configured Jade installation, but no Node installation, package manager or VS Code.
+```powershell
+./scripts/build-native-cli.ps1
+```
 
-Packaging requires the pinned Node v24.22.1 build runtime and development dependency `postject` 1.0.0-alpha.6. Install development dependencies from the lockfile before building. The matching Node runtime license is included. When Windows SDK signtool is available its original Node signature is removed before resource injection; the resulting executable is unsigned until a release signing step is added. A source package must run this build before `npm pack` to include the root `jade-cli.exe` used by the extension.
+The script compiles the native library, runs grouped C++ tests, and builds `dist/jade-cli-win-x64/jade-cli.exe` with a static C++ runtime. It discovers the installed Visual Studio toolchain automatically. `-TestsOnly` runs tests; `-TestFilter 'BrokerRuntime*'` selects a group. No package manager or downloaded C++ dependency is needed: the existing MIT-licensed nlohmann/json header is vendored.
 
-Set `JADE_CLI_STANDALONE_EXE` to the generated executable and run `node --test test/standalone.test.js` to verify help, a real source query, broker startup and shutdown with Node absent from PATH. That proof does not substitute for native Jade build/test controls.
+Tests cover configuration and positional arguments, schema-qualified discovery, process quoting/cancellation, source staging, diagnostics, warm sessions, broker startup races, authentication, client ownership, helper leases and recovery. The [test coverage matrix](native-cli/tests/README.md) identifies each test group and its limits. Default tests do not open a developer database. The explicit `JADE_CPP_TEST_SEED` connected proof accepts a private disposable TEMP database and validates actual Jade compilation and test execution. Hosted CI does not claim connected coverage without the licensed runtime.
 
-The packaging implementation follows [Node v24.22.1 single-executable application documentation](https://nodejs.org/download/release/v24.22.1/docs/api/single-executable-applications.html). Generated EXE/ZIP files remain outside Git; native source, packaging scripts, lockfile and license notices are tracked.
+Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade vendor DLLs, databases, credentials or generated evidence belong in Git. The previous Node implementation is preserved on the `codex/agent/ci-releases` branch (with a local `codex/node-cli-baseline` checkpoint) for comparison; it is not included in the native distribution.
 
-`npm test` runs contract/process tests without opening Jade databases. `npm run check` verifies assets/manifests/links. Native connected controls use private databases separately. Rebuilding helpers requires the installed Jade SDK and C++ build tools. Do not commit vendor DLLs, databases, caches, credentials or generated reports.
+## GitHub builds and releases
 
-Vendored dependencies retain their original licenses. No new license is assigned to legacy integration code or Jade vendor components. Distribution licensing remains to be decided.
+Windows CI builds and tests the native executable, verifies a portable copy outside the checkout, and creates `jade-cli-win-x64.zip`, `jade-cli.exe` and `SHA256SUMS`. The ZIP contains the complete native runtime and its hash manifest; the standalone EXE still needs the adjacent native helpers for connected operations. There is no npm runtime release.
+
+Release tags must match the native version and refer to a commit on the reviewed `main` branch. The release job verifies downloaded artifacts before publishing. `SHA256SUMS` covers the EXE and ZIP; `distribution.json` records the hashes of the executable and its runtime files. No release or merge is performed by an ordinary build.
+
+## Architecture diagram
+
+![Architecture](docs/architecture.drawio.svg)
+
+[Edit the diagram in draw.io](docs/architecture.drawio). The SVG is the rendered companion to the editable source.

@@ -1,8 +1,0 @@
-{
-  "name": "@jade-local-tools/sdk",
-  "version": "0.1.0",
-  "main": "index.js",
-  "type": "commonjs",
-  "files": ["index.js", "engine", "native", "vendor", "broker-client.js", "broker.js"],
-  "engines": {"node": ">=20"}
-}
