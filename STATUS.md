@@ -39,3 +39,16 @@ The coordinator will move repositories/workspaces out of OneDrive to `C:\Git` on
 Preserve Git worktree metadata and repair/verify worktree paths after relocation. Update absolute workspace/configuration references before running. Working identities depend on source-root paths: retain prior private Working databases/caches and data; do not delete them or overwrite Source during relocation. The installed Jade runtime/database is outside these repository moves.
 
 CLI worktrees are the main `Jade-CLI` checkout on `codex/agent/structural-diagnostics`, plus earlier init and structural-hotfix worktrees under `development`. Those earlier branches were merged; verify their own clean state before cleanup. The F5 extension worktree is owned by the UI agent after handoff, not by this CLI task. Two blocked-cleanup TEMP fixtures must remain untouched; the coordinator has their exact paths.
+
+## Read-only data-tools audit
+
+Read-only source audit completed without opening or mutating a database. No writable inspection route was found.
+
+- `RuntimeOperations.cpp` forces readOnly for both Source and Working inspection targets; session reuse is bound to the selected target/configuration.
+- `native-src/inspector/runtime.hpp` independently signs on to RootSchema/RootSchemaApp with shared mode0 and fixed database usage1 (Jade DB_READ_ONLY). JSON configuration cannot change it; production entry calls Runtime(config) without the writable fixture flag.
+- `InspectorSession.cpp` overwrites request command/id. Native dispatch accepts only catalogue, instances, object, collection, cursor release and close. No caller-selected method, script, query language or shell execution is exposed through inspection arguments.
+- OIDs require44 hexadecimal characters and native object/kind checks. Cursor tokens are opaque map keys bound to their source/query mode. Broker session IDs are prefixed with client ownership.
+- Stored properties are read through native property access; mapped properties are skipped. Iterators/licence objects are transient native resources. Application-defined allowedToInspect and configured development-security authorization hooks remain intact.
+- The enforced boundary is read-only persistent database access, not an OS sandbox or a claim that trusted authorization callbacks never run. Runtime initialization/logging and external effects of trusted native/authentication components are outside that narrower guarantee. No Source mutation test was performed.
+
+The inspector source matches its original committed helper source; the committed helper SHA256 is `95f8e26d3fbd749fa199ea5ee01bf3ed6dfc04f01a2831b025b3065933d21642`. MCP schema/argument negative tests and guidance are owned by the MCP repository. Native authority: [Jade Object Manager, opening a process](https://secure.jadeworld.com/developer-centre/JADE2018/OnlineDocumentation/content/resources/objectmanager/ch3jadeapi/opening_a_process.htm).
