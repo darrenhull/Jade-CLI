@@ -1,6 +1,6 @@
 # Jade CLI — native C++
 
-`jade-cli.exe` 0.3.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
+`jade-cli.exe` 0.3.1 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
 
 Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. Terminal commands and JSONL service requests use the same native implementation.
 
@@ -32,6 +32,8 @@ jade-cli test .\FishTest.cls .\HampsterTests.cls
 Run `jade-cli build` without filenames to scan the configured project, including newly added files. It ignores any legacy selected `program` setting and compares current source against the last successful Working build. Unchanged native inputs are reused; method-only edits can use incremental CLS loads. New classes, schema declarations and other structural changes can require a broader native project load to preserve dependencies. A failed load invalidates its build claims, so retrying cannot silently skip the failure. This is independent of Git and does not publish to Source. Bare project builds currently require one workspace root.
 
 Multiple build files are supplied together to one native project build. Multiple test files run sequentially through the same shared session, with a result for each file and a failing exit status if any fails. Duplicate source arguments are removed. Quote paths containing spaces. Pass explicit filenames; wildcard expansion is not implemented. These commands use the isolated Working database and do not publish to Source.
+
+Structural schema compiler failures include native source diagnostics as well as their Jade error code. The helper captures only the current load's bounded compiler log. Unambiguous generated source lines map back to their original local file with the native position/length; ambiguous mappings retain the actual generated file and line rather than guessing a location. A successful retry clears the failed load's diagnostics.
 `--args` takes a JSON object with native inspection fields such as `classOid`, `oid`, `cursor` and `limit`. Pages are bounded to 100. Inspection defaults to Working; `--target source` explicitly selects the original database. Use the persistent service for cursor paging across requests.
 
 ## Project setup

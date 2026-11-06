@@ -55,6 +55,8 @@ This repository owns the native C++ jade-cli executable, per-user broker, build/
 
 ## Builds, releases and maintenance
 
+- Open work-in-progress PRs as drafts and return them to draft when further changes are needed. Keep them draft until implementation, required checks and review findings are complete. A code push must not automatically mark a PR ready or queue its merge; readiness is a separate reviewed transition. Required owner approval and protected-branch checks still apply.
+
 - Independent checkouts must build from committed native inputs and declared toolchain/dependency versions.
 - Exclude credentials, user configuration, databases, caches, logs and research notes from Git. Track requested diagrams and build-required source, tests and notices.
 - Pin toolchains/dependencies and test the actual portable artifact outside the checkout without Node on PATH.
@@ -75,3 +77,6 @@ These rules are not exhaustive. Review the complete change and its affected call
 ## Automated PR comments
 
 Post automated PR comments through GitHub Actions or an authorized GitHub App so they use the bot identity. Include attribution that Codex prepared the comment on behalf of @darrenhull. The user-authenticated GitHub connector posts as the user; do not use it for future automated comments or imply that it is a bot. If a bot-backed path is unavailable, report that limitation instead of impersonating a bot.
+
+Do not request owner review or enable auto-merge while a pull request is Draft. Request owner review only after implementation, checks, and review fixes are complete and the pull request is explicitly marked ready.
+

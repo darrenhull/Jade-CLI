@@ -125,8 +125,11 @@ json NativeReports::diagnostics(const std::string &output,
     std::regex structural(
         R"(Compile Error (\d+)\s*-\s*([^\r\n]+)(?:\s*\r?\nAt line (\d+):\s*\r?\n([^\r\n]+))?)",
         std::regex::icase);
+    std::map<std::string, std::vector<std::string>> messages;
+    std::map<std::string, size_t> nextMessage;
     for (std::sregex_iterator it(output.begin(), output.end(), structural), end; it != end; ++it) {
         auto m = *it;
+        messages[m[1]].push_back(m[2]);
         std::string source;
         size_t line = std::max(1, m[3].matched ? std::stoi(m[3]) : 1);
         std::string needle = m[4];
@@ -159,6 +162,108 @@ json NativeReports::diagnostics(const std::string &output,
                          {"message", m[2].str()},
                          {"line", line},
                          {"column", 1}});
+    }
+    // Persistent native loads write the authoritative structural position to
+    // compiler.log instead of printing the older "At line" snippet. Only
+    // accept files supplied by this load; never open a path from log text.
+    std::regex location(
+        R"(Schema compile failed: file=([^\r\n]+?), schema=(\w+),[^\r\n]*?error=(\d+), pos=(\d+), len=(\d+), lineno=(\d+))",
+        std::regex::icase);
+    for (std::sregex_iterator it(output.begin(), output.end(), location), end; it != end; ++it) {
+        auto m = *it;
+        const auto code = m[3].str();
+        auto &messageIndex = nextMessage[code];
+        const bool hasMessage = messageIndex < messages[code].size();
+        const std::string message =
+            hasMessage ? messages[code][messageIndex++] : "Native Jade compiler error " + code;
+        const SourceEntry *loaded = nullptr;
+        for (auto &entry : sources)
+            if (pathKey(entry.file) == pathKey(wide(m[1].str()))) {
+                loaded = &entry;
+                break;
+            }
+        if (!loaded)
+            continue;
+        const auto nativeLine = std::stoull(m[6]), position = std::stoull(m[4]);
+        const auto loadedText = wide(loaded->text);
+        size_t start = 0, lineNumber = 1;
+        while (lineNumber < nativeLine && start < loadedText.size()) {
+            auto newline = loadedText.find(L'\n', start);
+            if (newline == std::wstring::npos) {
+                start = loadedText.size();
+                break;
+            }
+            start = newline + 1;
+            ++lineNumber;
+        }
+        if (!nativeLine || lineNumber != nativeLine || start > loadedText.size())
+            continue;
+        auto finish = loadedText.find(L'\n', start);
+        if (finish == std::wstring::npos)
+            finish = loadedText.size();
+        auto originalLine = loadedText.substr(start, finish - start);
+        const auto first = originalLine.find_first_not_of(L" \t\r"),
+                   last = originalLine.find_last_not_of(L" \t\r");
+        auto needle = first == std::wstring::npos ? std::wstring()
+                                                  : originalLine.substr(first, last - first + 1);
+        const auto nativeColumn =
+            position >= start && position <= finish ? position - start + 1 : 1;
+        const SourceEntry *mapped = nullptr;
+        size_t mappedLine = 0, mappedLeading = 0;
+        bool ambiguous = false;
+        for (auto &entry : sources) {
+            if (&entry == loaded || entry.model.schema != m[2])
+                continue;
+            auto text = wide(entry.text);
+            for (size_t at = 0, number = 1; at < text.size(); ++number) {
+                auto next = text.find(L'\n', at);
+                if (next == std::wstring::npos)
+                    next = text.size();
+                auto line = text.substr(at, next - at);
+                auto leading = line.find_first_not_of(L" \t\r"),
+                     trailing = line.find_last_not_of(L" \t\r");
+                if (!needle.empty() && leading != std::wstring::npos &&
+                    line.substr(leading, trailing - leading + 1) == needle) {
+                    if (mapped)
+                        ambiguous = true;
+                    mapped = &entry;
+                    mappedLine = number;
+                    mappedLeading = leading;
+                }
+                at = next + 1;
+            }
+        }
+        if (ambiguous)
+            mapped = nullptr;
+        const auto column = mapped && first != std::wstring::npos && nativeColumn > first
+                                ? nativeColumn - first + mappedLeading
+                                : nativeColumn;
+        json diagnostic = {{"source", utf8((mapped ? mapped->file : loaded->file).wstring())},
+                           {"schema", m[2].str()},
+                           {"compiler_error", std::stoi(m[3])},
+                           {"message", message},
+                           {"line", mapped ? mappedLine : nativeLine},
+                           {"column", column},
+                           {"length", std::stoull(m[5])},
+                           {"generated_source", mapped == nullptr}};
+        bool duplicate = false;
+        for (auto &existing : r) {
+            if (pathKey(wide(existing.at("source"))) != pathKey(wide(diagnostic.at("source"))) ||
+                existing.at("compiler_error") != diagnostic.at("compiler_error") ||
+                existing.at("line") != diagnostic.at("line") ||
+                (hasMessage && existing.at("message") != diagnostic.at("message")))
+                continue;
+            if (existing.contains("length") && (existing.at("column") != diagnostic.at("column") ||
+                                                existing.at("length") != diagnostic.at("length")))
+                continue;
+            existing["column"] = diagnostic["column"];
+            existing["length"] = diagnostic["length"];
+            existing["generated_source"] = diagnostic["generated_source"];
+            duplicate = true;
+            break;
+        }
+        if (!duplicate)
+            r.push_back(std::move(diagnostic));
     }
     return r;
 }

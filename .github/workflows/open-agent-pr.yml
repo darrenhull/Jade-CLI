@@ -79,7 +79,7 @@ jobs:
             if (-not $title -or $title.Length -gt 256) { throw 'The final commit or selected pull request must provide a concise title.' }
             $attribution = "Prepared by Codex on behalf of @darrenhull.`nOpened by the GitHub Actions App (github-actions[bot]) so @darrenhull can review.`n`n"
             $validation = "`n`nPR automation run: https://github.com/$repository/actions/runs/$env:GITHUB_RUN_ID"
-            $request = @{ title = $title; body = $attribution + $context + $description + $validation; head = $branch; base = $env:DEFAULT_BRANCH; draft = $false }
+            $request = @{ title = $title; body = $attribution + $context + $description + $validation; head = $branch; base = $env:DEFAULT_BRANCH; draft = $true }
             $payload = Join-Path $env:RUNNER_TEMP ('agent-pr-' + [guid]::NewGuid().ToString('N') + '.json')
             try {
               [IO.File]::WriteAllText($payload, ($request | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
@@ -98,21 +98,15 @@ jobs:
           if ($verified.head.ref -ne $branch -or $verified.head.repo.full_name -ne $repository -or $verified.base.ref -ne $env:DEFAULT_BRANCH -or $verified.html_url -ne "https://github.com/$repository/pull/$number") {
             throw 'The pull request repository, branch or URL did not match the requested identity.'
           }
-          if (@($verified.requested_reviewers | Where-Object { $_.login -eq $env:REVIEWER }).Count -eq 0) {
-            $payload = Join-Path $env:RUNNER_TEMP ('agent-reviewer-' + [guid]::NewGuid().ToString('N') + '.json')
-            try {
-              [IO.File]::WriteAllText($payload, (@{ reviewers = @($env:REVIEWER) } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
-              $reviewJson = gh api --method POST "repos/$repository/pulls/$number/requested_reviewers" --input $payload
-              if ($LASTEXITCODE -ne 0) { throw 'Could not request the human owner review.' }
-              $review = $reviewJson | ConvertFrom-Json
-              if (@($review.requested_reviewers | Where-Object { $_.login -eq $env:REVIEWER }).Count -ne 1) { throw 'The requested human reviewer could not be verified.' }
-            } finally {
-              if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload }
-            }
+          if (-not $verified.draft) {
+            gh pr ready $number --undo --repo "$repository"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not return work in progress to draft.' }
+            $draftJson = gh api "repos/$repository/pulls/$number"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not verify draft state.' }
+            $verified = $draftJson | ConvertFrom-Json
+            if (-not $verified.draft) { throw 'Work in progress must remain a draft.' }
           }
-          gh pr merge $number --auto --squash --match-head-commit "$($verified.head.sha)" --repo "$repository"
-          if ($LASTEXITCODE -ne 0) { throw 'Could not queue squash auto-merge behind required reviews and checks.' }
           "url=$($verified.html_url)" >> $env:GITHUB_OUTPUT
           "number=$number" >> $env:GITHUB_OUTPUT
           $sourceSummary = if ($env:SOURCE_PR -eq '0') { 'Context comes from the final commit.' } else { "Original PR #$env:SOURCE_PR remains open." }
-          "GitHub Actions App PR: $($verified.html_url). Human reviewer: @$env:REVIEWER. Squash auto-merge waits for required reviews and checks. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY
+          "GitHub Actions App draft PR: $($verified.html_url). Owner review is requested only after readiness is verified. Keep draft until implementation, checks and review fixes are complete; this push does not mark it ready or queue a merge. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY

@@ -150,6 +150,12 @@ json load(Runtime &r, const json &config, const json &request) {
         "Loader log must remain inside private working root.");
   auto offset =
       std::filesystem::exists(log) ? std::filesystem::file_size(log) : 0;
+  // The loader summary omits structural source positions. Jade records those
+  // in compiler.log; capture only this load's bounded delta, not prior errors.
+  auto compilerLog = canonical(config.at("root")) / L"logs" / L"compiler.log";
+  auto compilerOffset = std::filesystem::exists(compilerLog)
+                            ? std::filesystem::file_size(compilerLog)
+                            : 0;
   auto start = Clock::now();
   Oid parameters{};
   parameters.classNo = DSKHUGESTRINGARRAY;
@@ -225,6 +231,7 @@ json load(Runtime &r, const json &config, const json &request) {
   return {{"code", code},
           {"success", code == 0},
           {"loadMilliseconds", milliseconds(start)},
+          {"compilerOutput", loaderLog(compilerLog, compilerOffset)},
           {"output", loaderLog(log, offset)}};
 }
 int wmain(int argc, wchar_t **argv) {
