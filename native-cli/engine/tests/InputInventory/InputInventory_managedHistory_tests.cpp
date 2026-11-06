@@ -25,6 +25,16 @@ int main() {
         rejected = std::string(e.what()).find("managed schema header") != std::string::npos;
     }
     assert(rejected);
+    auto replaced = successful;
+    replaced["Old.cls"]["owner"] = "Renamed";
+    replaced["A.scm"]["schema"] = "Retargeted";
+    const auto renamedHistory = InputInventory::remember(successful, replaced);
+    bool oldClass = false, oldHeader = false;
+    for (const auto &[key, value] : renamedHistory.items()) {
+        oldClass |= value.value("owner", "") == "Old";
+        oldHeader |= value.value("schema", "") == "A" && value.contains("parent");
+    }
+    assert(oldClass && oldHeader);
     const auto committed = InputInventory::replaceSchemas(managed, attempted, {"A"});
     assert(!committed.contains("Old.cls") && committed.contains("B.scm"));
     std::cout << "Managed identity history survives failed-claim invalidation; successful scopes "

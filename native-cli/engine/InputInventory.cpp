@@ -3,8 +3,21 @@
 namespace jade::native {
 json InputInventory::remember(const json &previous, const json &current) {
     auto result = previous;
-    for (const auto &[key, value] : current.items())
+    for (const auto &[key, value] : current.items()) {
+        if (const auto old = result.find(key); old != result.end()) {
+            const auto kind = old->value("kind", ""), schema = old->value("schema", "");
+            const auto owner = old->value("owner", "");
+            const bool classChanged = kind == "class" && (value.value("kind", "") != kind ||
+                                                          value.value("schema", "") != schema ||
+                                                          value.value("owner", "") != owner);
+            const bool headerChanged =
+                old->contains("parent") &&
+                (!value.contains("parent") || value.value("schema", "") != schema);
+            if (classChanged || headerChanged)
+                result["managed:" + json::array({kind, schema, owner}).dump()] = *old;
+        }
         result[key] = value;
+    }
     return result;
 }
 void InputInventory::requireRemovalHeaders(const json &current, const json &previous,
