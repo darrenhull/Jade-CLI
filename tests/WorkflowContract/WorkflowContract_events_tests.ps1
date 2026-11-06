@@ -3,7 +3,7 @@ $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $workflows = Join-Path $root '.github/workflows'
 $build = [IO.File]::ReadAllText((Join-Path $workflows 'build-release.yml')).Replace("`r`n", "`n")
 if ($build -notmatch '(?m)^    branches: \[''main''\]$') { throw 'Heavy builds must run only for main pushes, not feature pushes.' }
-if ($build -notmatch '(?m)^  pull_request:' -or $build -notmatch '(?m)^  workflow_dispatch:' -or $build -notmatch '(?m)^    tags: \[''v\*''\]$') { throw 'Keep PR, explicit dispatch and release-tag builds.' }
+if ($build -notmatch '(?m)^  pull_request:' -or $build -notmatch '(?m)^  workflow_dispatch:' -or $build -match '(?m)^    tags:') { throw 'Keep PR/manual validation and only main push publication; tags must not race the main publisher.' }
 if ($build -match '(?m)^  open-agent-pr:') { throw 'PR metadata creation must not require the heavy native build.' }
 $agent = [IO.File]::ReadAllText((Join-Path $workflows 'agent-pr.yml')).Replace("`r`n", "`n")
 if ($agent -notmatch 'codex/agent/\*\*' -or $agent -notmatch 'uses: \./\.github/workflows/open-agent-pr.yml') { throw 'Keep bot PR creation in a separate agent-branch workflow.' }
