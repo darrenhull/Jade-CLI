@@ -5,12 +5,76 @@
 #include <future>
 #include <sstream>
 #include <iostream>
+#include <functional>
+#include <memory>
 
 using namespace jade::native;
 namespace {
 void require(bool condition, const char *message) {
     if (!condition)
         throw std::runtime_error(message);
+}
+void removeFixture(const std::filesystem::path &root, const std::function<void()> &waitForExit) {
+    require(std::filesystem::weakly_canonical(root.parent_path()) ==
+                    std::filesystem::weakly_canonical(std::filesystem::temp_directory_path()) &&
+                root.filename().wstring().starts_with(L"jade-broker-transport-"),
+            "Refusing cleanup outside the owned TEMP fixture.");
+    waitForExit();
+    // The broker acknowledges shutdown before its worker/pipe threads exit and
+    // owner.json is finally closed. Never delete state while that process lives.
+    const auto deadline = GetTickCount64() + 3000;
+    for (;;) {
+        std::error_code error;
+        std::filesystem::remove_all(root, error);
+        if (!error)
+            return;
+        const bool transient = error == std::errc::directory_not_empty ||
+                               error == std::errc::permission_denied ||
+                               error == std::errc::device_or_resource_busy;
+        if (!transient || GetTickCount64() >= deadline)
+            throw std::filesystem::filesystem_error("Owned test fixture cleanup failed", root,
+                                                    error);
+        Sleep(20); // Only post-exit filesystem contention is retried.
+    }
+}
+using OwnedProcess = std::unique_ptr<void, decltype(&CloseHandle)>;
+OwnedProcess ownProcess(DWORD pid) {
+    const auto handle = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (!handle && GetLastError() != ERROR_INVALID_PARAMETER)
+        throw std::runtime_error("Cannot observe the owned test broker's lifetime.");
+    return OwnedProcess(handle, CloseHandle);
+}
+void waitForOwnedProcesses(const std::vector<OwnedProcess> &processes) {
+    for (const auto &process : processes)
+        if (process)
+            require(WaitForSingleObject(process.get(), 5000) == WAIT_OBJECT_0,
+                    "The owned test broker did not exit; preserving its state directory.");
+}
+void verifyExitBeforeCleanup(const std::filesystem::path &executable) {
+    const auto root = std::filesystem::temp_directory_path() /
+                      ("jade-broker-transport-cleanup-" + std::to_string(GetCurrentProcessId()));
+    std::filesystem::create_directories(root);
+    NativeProcess holder;
+    try {
+        holder.start(executable, {L"cleanup-holder"}, root);
+        require(holder.line(nullptr, 5000, {}).starts_with("held"),
+                "Cleanup holder did not acquire its file.");
+        bool waited = false;
+        removeFixture(root, [&] {
+            waited = true;
+            holder.write("close\n");
+            require(holder.waitExit(5000), "The owned directory holder did not exit.");
+        });
+        require(waited && !std::filesystem::exists(root),
+                "Fixture cleanup must wait for the owned process before removing its directory.");
+    } catch (...) {
+        holder.stop();
+        std::error_code cleanup;
+        std::filesystem::remove_all(root, cleanup);
+        if (cleanup)
+            std::cerr << "Cleanup regression evidence retained: " << cleanup.message() << '\n';
+        throw;
+    }
 }
 std::vector<nlohmann::json> packets(const std::string &text) {
     std::istringstream lines(text);
@@ -23,16 +87,31 @@ std::vector<nlohmann::json> packets(const std::string &text) {
 } // namespace
 int wmain(int argc, wchar_t **argv) {
     BrokerOptions activeOptions;
+    std::filesystem::path root, helperFile;
+    std::vector<OwnedProcess> ownedBrokers;
     try {
+        if (argc > 1 && std::wstring(argv[1]) == L"cleanup-holder") {
+            const auto file = CreateFileW(L"held-state", GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                                          FILE_ATTRIBUTE_NORMAL, nullptr);
+            require(file != INVALID_HANDLE_VALUE, "Cannot lock cleanup fixture.");
+            std::cout << "held" << std::endl;
+            std::string close;
+            std::getline(std::cin, close);
+            std::ofstream("late-owner.json") << "finished";
+            CloseHandle(file);
+            return 0;
+        }
         if (auto handled = BrokerTestFixture::handle(argc, argv))
             return *handled;
         auto options = BrokerTestFixture::options();
-        const auto root = std::filesystem::temp_directory_path() /
-                          ("jade-broker-transport-" + std::to_string(GetCurrentProcessId()));
+        verifyExitBeforeCleanup(options.executable);
+        root = std::filesystem::temp_directory_path() /
+               ("jade-broker-transport-" + std::to_string(GetCurrentProcessId()));
         options.stateDirectory = root;
         activeOptions = options;
         const auto first = BrokerRuntime::request(options, {{"command", "status"}});
         const auto originalPid = first.at("brokerPID").get<DWORD>();
+        ownedBrokers.push_back(ownProcess(originalPid));
         std::ifstream tokenFile(root / L"token");
         std::string token;
         tokenFile >> token;
@@ -149,6 +228,7 @@ int wmain(int argc, wchar_t **argv) {
             require(recovered, "A client that stopped reading progress blocked the entire broker.");
         }
         const auto helperDir = options.executable.parent_path() / L"native";
+        helperFile = helperDir / L"jade-inspect-helper.exe";
         std::filesystem::create_directories(helperDir);
         std::filesystem::copy_file(options.executable, helperDir / L"jade-inspect-helper.exe",
                                    std::filesystem::copy_options::overwrite_existing);
@@ -179,6 +259,7 @@ int wmain(int argc, wchar_t **argv) {
         }
         require(crashReported, "Broker crash was reported as success.");
         const auto restarted = BrokerRuntime::request(options, {{"command", "status"}});
+        ownedBrokers.push_back(ownProcess(restarted.at("brokerPID").get<DWORD>()));
         require(restarted.at("brokerPID").get<DWORD>() != originalPid,
                 "Crashed broker was not replaced.");
         require(BrokerRuntime::request(options, {{"command", "shutdown"}}).at("passed") == true,
@@ -210,17 +291,24 @@ int wmain(int argc, wchar_t **argv) {
             refused = true;
         }
         require(refused, "Surviving native owner did not prevent broker restart.");
-        std::filesystem::remove_all(root);
-        std::filesystem::remove(helperDir / L"jade-inspect-helper.exe");
+        removeFixture(root, [&] { waitForOwnedProcesses(ownedBrokers); });
+        std::filesystem::remove(helperFile);
         std::cout << "Broker transport malformed JSON, bounds, disconnect, helper UTF-8/exit, "
                      "crash recovery and private state passed\n";
         return 0;
     } catch (const std::exception &error) {
         std::cerr << error.what() << std::endl;
-        if (!activeOptions.stateDirectory.empty())
+        if (!activeOptions.stateDirectory.empty() && !ownedBrokers.empty())
             try {
-                BrokerRuntime::request(activeOptions, {{"command", "shutdown"}});
-            } catch (...) {
+                const auto &last = ownedBrokers.back();
+                if (last && WaitForSingleObject(last.get(), 0) == WAIT_TIMEOUT)
+                    BrokerRuntime::request(activeOptions, {{"command", "shutdown"}});
+                removeFixture(root, [&] { waitForOwnedProcesses(ownedBrokers); });
+                if (!helperFile.empty())
+                    std::filesystem::remove(helperFile);
+            } catch (const std::exception &cleanup) {
+                std::cerr << "Cleanup failed; preserving the original failure and owned state: "
+                          << cleanup.what() << std::endl;
             }
         return 1;
     }
