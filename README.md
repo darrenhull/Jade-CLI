@@ -12,7 +12,7 @@ Unzip the Windows x64 distribution and run `jade-cli.exe help`. Keep its adjacen
 jade-cli init --profile demo --install C:\Jade2025
 jade-cli doctor --json
 jade-cli build --json
-jade-cli test --config jade.json --json
+jade-cli test .\FishTest.cls --json
 jade-cli tests list --config jade.json --json
 jade-cli source search --config jade.json --query Fish --json
 jade-cli inspect catalog --config jade.json --target working --json
