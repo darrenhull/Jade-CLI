@@ -28,7 +28,12 @@ typeSources
  $status=& $exe status --json|ConvertFrom-Json;if($LASTEXITCODE -ne 0 -or !$status.brokerPID){throw 'Native broker status failed'}
  $closed=& $exe shutdown --json|ConvertFrom-Json;if($LASTEXITCODE -ne 0 -or !$closed.passed){throw 'Native broker shutdown failed'}
  $shutdownComplete=$true
- if(Get-Process -Id $status.brokerPID -ErrorAction SilentlyContinue){Wait-Process -Id $status.brokerPID -Timeout 5 -ErrorAction Stop}
+ try { Wait-Process -Id $status.brokerPID -Timeout 5 -ErrorAction Stop }
+ catch {
+  # A fast shutdown can exit between the status response and PID lookup.
+  # Only an already-exited process counts as successful shutdown.
+  if(Get-Process -Id $status.brokerPID -ErrorAction SilentlyContinue){throw}
+ }
  Write-Output 'Native portable CLI smoke: PASS (outside checkout, Node absent from PATH)'
 }finally{
  if(!$shutdownComplete -and $exe -and (Test-Path -LiteralPath $exe)){& $exe shutdown --json|Out-Null}
