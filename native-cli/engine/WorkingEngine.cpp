@@ -307,6 +307,8 @@ json WorkingEngine::executeImpl(const json &request, ProjectModel *preparedProje
         auto inventory = project.inventory();
         auto stateFile = root / L"native-inputs-v1.json";
         auto state = readJson(stateFile);
+        const auto managedFile = root / L"native-managed-inputs-v1.json";
+        auto managed = InputInventory::remember(readJson(managedFile), state);
         std::vector<SourceEntry> sources;
         for (auto &s : project.schemas) {
             sources.push_back(s.header);
@@ -327,7 +329,9 @@ json WorkingEngine::executeImpl(const json &request, ProjectModel *preparedProje
             for (const auto &schema : project.schemas)
                 if (schema.header.model.completeSchema)
                     headerSchemas.insert(schema.name);
-            InputInventory::requireRemovalHeaders(inventory, scopedState, headerSchemas);
+            InputInventory::requireRemovalHeaders(
+                inventory, InputInventory::withinSchemas(managed, project.scopeSchemas),
+                headerSchemas);
         }
         bool changed = plan.changed, structural = plan.structural;
         std::vector<SourceEntry> delta;
@@ -336,6 +340,9 @@ json WorkingEngine::executeImpl(const json &request, ProjectModel *preparedProje
             if (changedKeys.contains(pathKey(source.file)))
                 delta.push_back(source);
         if (changed) {
+            // A failed native batch can leave committed definitions behind.
+            managed = InputInventory::remember(managed, inventory);
+            writeText(managedFile, managed.dump(2));
             writeText(stateFile, completeScope ? InputInventory::replaceSchemas(
                                                      state, json::object(), project.scopeSchemas)
                                                      .dump(2)
@@ -449,6 +456,19 @@ json WorkingEngine::executeImpl(const json &request, ProjectModel *preparedProje
                                   std::to_string(loaded.value("code", 2)) + "). See native output.";
                 return {{"passed", false}, {"code", loaded.value("code", 2)}, {"report", report}};
             }
+            // Only authoritative native loads or explicit schema deletion prove identities absent.
+            std::set<std::string> reconciled;
+            if (completeScope)
+                reconciled = project.scopeSchemas;
+            else if (fullBuild) {
+                for (const auto &schema : project.schemas)
+                    if (schema.header.model.completeSchema)
+                        reconciled.insert(schema.name);
+                reconciled.insert(plan.removedSchemas.begin(), plan.removedSchemas.end());
+            }
+            auto committedManaged = InputInventory::replaceSchemas(
+                managed, InputInventory::withinSchemas(inventory, reconciled), reconciled);
+            writeText(managedFile, committedManaged.dump(2));
             auto combined = state;
             for (auto &[key, value] : inventory.items())
                 combined[key] = value;

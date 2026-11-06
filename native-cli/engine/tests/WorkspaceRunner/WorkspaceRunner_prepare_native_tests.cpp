@@ -176,6 +176,65 @@ int main() try {
             afterMissingHeader.at("report").at("output") != "73\n")
             throw std::runtime_error("Missing header affected an unrelated schema: " +
                                      afterMissingHeader.dump());
+        writeText(src / (a + ".scm"), savedHeader);
+        config["schema"] = a;
+        const auto restored = run("write 42;");
+        if (!restored.value("passed", false))
+            throw std::runtime_error("Could not restore first schema fixture: " + restored.dump());
+        const auto imports = src / a / "importedPackageDefinitions.sec";
+        writeText(imports, "importedPackageDefinitions\r\nFixturePackage from " + b + ";\r\n");
+        std::filesystem::remove(src / (b + ".scm"));
+        const auto missingImported = run("write 42;");
+        if (missingImported.value("passed", true) ||
+            missingImported.at("report")
+                    .value("error", "")
+                    .find("Missing schema header for " + b) == std::string::npos)
+            throw std::runtime_error("Imported local classes bypassed their missing header: " +
+                                     missingImported.dump());
+        writeText(src / (b + ".scm"), header(b, true));
+        std::filesystem::remove(imports);
+        writeText(src / a / "types" / "RetryType.cls", cls(a, "RetryType"));
+        config["timeoutMilliseconds"] = 1;
+        const auto failedRejoin = run("write 42;");
+        config["timeoutMilliseconds"] = 60000;
+        if (failedRejoin.value("passed", true) || !failedRejoin.value("timedOut", false))
+            throw std::runtime_error("Owned native rejoin did not time out as expected: " +
+                                     failedRejoin.dump());
+        const auto managedFile =
+            std::filesystem::path(wide(WorkingEngine::workingLocation(config).at("root"))) /
+            "native-managed-inputs-v1.json";
+        const auto remembered = json::parse(readText(managedFile));
+        bool rememberedHeader = false;
+        for (const auto &[key, value] : remembered.items())
+            if (value.value("schema", "") == a && value.contains("parent"))
+                rememberedHeader = true;
+        if (!rememberedHeader)
+            throw std::runtime_error("Failed rejoin lost durable managed-header identity.");
+        if (!contains(root, src / a))
+            throw std::runtime_error("Fixture removal escaped its owned root.");
+        std::filesystem::remove_all(src / a);
+        std::filesystem::remove(src / (a + ".scm"));
+        working.disconnect();
+        {
+            WorkingEngine reopened(std::filesystem::current_path());
+            WorkspaceRunner retry(reopened);
+            const auto stale = retry.execute({{"config", config},
+                                              {"sourceText", "write 42;"},
+                                              {"source", "untitled:failure-history-proof"}});
+            if (stale.value("passed", true) ||
+                stale.at("report").value("error", "").find("managed schema header") ==
+                    std::string::npos)
+                throw std::runtime_error("Failed-load history allowed stale schema execution: " +
+                                         stale.dump());
+            reopened.disconnect();
+        }
+        config["schema"] = b;
+        const auto afterFailedRejoin =
+            run("vars x:KeepType; begin create x transient; delete x; write 73; end;");
+        if (!afterFailedRejoin.value("passed", false) ||
+            afterFailedRejoin.at("report").at("output") != "73\n")
+            throw std::runtime_error("Failed rejoin history affected an unrelated schema: " +
+                                     afterFailedRejoin.dump());
         working.disconnect();
         fixture.remove();
         std::cout << "Header/resource-only prep, filesystem deletion and unrelated schema native "

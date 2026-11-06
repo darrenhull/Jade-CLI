@@ -405,7 +405,7 @@ ProjectModel ProjectModel::schemaScope(const std::string &schema) const {
         if (const auto found = byName.find(name); found != byName.end()) {
             pending.push_back(found->second->parent);
             for (const auto &imported : importedSchemaNames(*found->second))
-                if (byName.contains(imported))
+                if (byName.contains(imported) || looseParents.contains(imported))
                     pending.push_back(imported);
         } else if (looseParents.contains(name))
             pending.push_back(looseParents.at(name));

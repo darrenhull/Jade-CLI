@@ -7,6 +7,7 @@ struct InputPlan {
 };
 class InputInventory {
   public:
+    static json remember(const json &previous, const json &current);
     static void requireRemovalHeaders(const json &current, const json &previous,
                                       const std::set<std::string> &headerSchemas);
     static InputPlan compare(const json &current, const json &previous, bool completeProject);

@@ -1,6 +1,12 @@
 #include "InputInventory.hpp"
 #include <algorithm>
 namespace jade::native {
+json InputInventory::remember(const json &previous, const json &current) {
+    auto result = previous;
+    for (const auto &[key, value] : current.items())
+        result[key] = value;
+    return result;
+}
 void InputInventory::requireRemovalHeaders(const json &current, const json &previous,
                                            const std::set<std::string> &headerSchemas) {
     std::set<std::pair<std::string, std::string>> classes;
