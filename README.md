@@ -99,7 +99,9 @@ Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade
 
 Windows CI builds and tests the native executable, verifies a portable copy outside the checkout, and creates `jade-cli-win-x64.zip`, `jade-cli.exe` and `SHA256SUMS`. The ZIP contains the complete native runtime and its hash manifest; the standalone EXE still needs the adjacent native helpers for connected operations. There is no npm runtime release.
 
-Release tags must match the native version and refer to a commit on the reviewed `main` branch. The release job verifies downloaded artifacts before publishing. `SHA256SUMS` covers the EXE and ZIP; `distribution.json` records the hashes of the executable and its runtime files. No release or merge is performed by an ordinary build.
+Pull requests run validation once. After an approved merge to `main`, a successful build publishes a new native version automatically; an already-published version remains unchanged. Bump the native version to publish a new CLI release. Version tags remain supported and must match the native version and reviewed `main` history. The release job verifies downloaded artifacts and finishes uploading a draft before publication. `SHA256SUMS` covers the EXE and ZIP; `distribution.json` records the hashes of the executable and its runtime files.
+
+Bot PR creation runs separately from the full build. Squash auto-merge waits for the required owner approval, checks and resolved discussions; feature branches are deleted after merge. GitHub may require approval to start workflows on a newly bot-created PR.
 
 ## Architecture diagram
 

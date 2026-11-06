@@ -16,7 +16,7 @@ on:
         value: ${{ jobs.open.outputs.number }}
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -78,7 +78,7 @@ jobs:
             }
             if (-not $title -or $title.Length -gt 256) { throw 'The final commit or selected pull request must provide a concise title.' }
             $attribution = "Prepared by Codex on behalf of @darrenhull.`nOpened by the GitHub Actions App (github-actions[bot]) so @darrenhull can review.`n`n"
-            $validation = "`n`nValidation run: https://github.com/$repository/actions/runs/$env:GITHUB_RUN_ID"
+            $validation = "`n`nPR automation run: https://github.com/$repository/actions/runs/$env:GITHUB_RUN_ID"
             $request = @{ title = $title; body = $attribution + $context + $description + $validation; head = $branch; base = $env:DEFAULT_BRANCH; draft = $false }
             $payload = Join-Path $env:RUNNER_TEMP ('agent-pr-' + [guid]::NewGuid().ToString('N') + '.json')
             try {
@@ -110,7 +110,9 @@ jobs:
               if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload }
             }
           }
+          gh pr merge $number --auto --squash --match-head-commit "$($verified.head.sha)" --repo "$repository"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not queue squash auto-merge behind required reviews and checks.' }
           "url=$($verified.html_url)" >> $env:GITHUB_OUTPUT
           "number=$number" >> $env:GITHUB_OUTPUT
           $sourceSummary = if ($env:SOURCE_PR -eq '0') { 'Context comes from the final commit.' } else { "Original PR #$env:SOURCE_PR remains open." }
-          "GitHub Actions App PR: $($verified.html_url). Human reviewer: @$env:REVIEWER. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY
+          "GitHub Actions App PR: $($verified.html_url). Human reviewer: @$env:REVIEWER. Squash auto-merge waits for required reviews and checks. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY
