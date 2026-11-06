@@ -95,6 +95,7 @@ SourceModel SourceModel::parse(const std::string &text, const std::string &sourc
             tokens[i + 2].value == "subschemaOf") {
             m.schema = tokens[i + 1].value;
             m.parentSchema = tokens[i + 3].value;
+            m.completeSchema = tokens[i + 4].value == "completeDefinition";
         } else if (t == "typeHeaders" && headers == tokens.size())
             headers = i;
         else if (t == "typeDefinitions" && definitions == tokens.size())

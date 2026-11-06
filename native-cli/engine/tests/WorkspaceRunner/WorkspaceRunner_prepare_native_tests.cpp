@@ -18,9 +18,10 @@ int main() try {
     const auto root = fixture.path(), src = root / "src";
     const auto suffix = uniqueId().substr(0, 8), a = "WorkspaceEmpty" + suffix,
                b = "WorkspaceOther" + suffix;
-    auto header = [](const std::string &schema) {
+    auto header = [](const std::string &schema, bool complete = false) {
         return "jadeVersionNumber \"25.0.02\";\nschemaDefinition\n" + schema +
-               " subschemaOf RootSchema partialDefinition;\n";
+               " subschemaOf RootSchema " +
+               (complete ? "completeDefinition" : "partialDefinition") + ";\n";
     };
     auto cls = [&](const std::string &schema, const std::string &owner) {
         return header(schema) + "typeHeaders\n" + owner +
@@ -28,7 +29,7 @@ int main() try {
                " completeDefinition\n(\n)\ntypeSources\n";
     };
     auto emptySchema = [&](const std::string &schema) {
-        return header(schema) + "typeHeaders\n" + schema +
+        return header(schema, true) + "typeHeaders\n" + schema +
                " subclassOf RootSchemaApp transient;\nG" + schema +
                " subclassOf RootSchemaGlobal transient;\nS" + schema +
                " subclassOf RootSchemaSession transient;\ntypeDefinitions\n" + schema +
@@ -67,7 +68,7 @@ int main() try {
         // Exercise the standard native extracted layout before combining
         // a minimal schema header with independently edited section resources.
         auto splitScaffold = [&](const std::string &schema) {
-            writeText(src / (schema + ".scm"), header(schema));
+            writeText(src / (schema + ".scm"), header(schema, true));
             const auto document = emptySchema(schema);
             const auto databaseStart = document.find("databaseDefinitions");
             writeText(src / schema / "databaseDefinitions.sec",
@@ -138,8 +139,17 @@ int main() try {
         const auto loaded = run("vars x:RemovedType; begin create x transient; delete x; end;");
         if (!loaded.value("passed", false))
             throw std::runtime_error("Local class creation failed: " + loaded.dump());
+        const auto savedHeader = readText(src / (a + ".scm"));
+        writeText(src / (a + ".scm"), header(a));
         std::filesystem::remove(removed);
-        const auto absent = run("vars x:RemovedType; begin end;");
+        const auto partialRemoval = run("vars x:RemovedType; begin end;");
+        if (partialRemoval.value("passed", true) ||
+            partialRemoval.at("report").value("error", "").find("complete schema header") ==
+                std::string::npos)
+            throw std::runtime_error("Partial schema removal did not fail closed: " +
+                                     partialRemoval.dump());
+        writeText(src / (a + ".scm"), savedHeader);
+        const auto absent = run("vars x:RemovedType; begin create x transient; delete x; end;");
         if (absent.value("passed", true) || absent.value("code", 0) != 6023)
             throw std::runtime_error("Deleted local class remained executable: " + absent.dump());
         const auto after = json::parse(readText(stateFile));

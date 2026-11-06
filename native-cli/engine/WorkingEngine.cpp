@@ -325,7 +325,8 @@ json WorkingEngine::executeImpl(const json &request, ProjectModel *preparedProje
         if (completeScope) {
             std::set<std::string> headerSchemas;
             for (const auto &schema : project.schemas)
-                headerSchemas.insert(schema.name);
+                if (schema.header.model.completeSchema)
+                    headerSchemas.insert(schema.name);
             InputInventory::requireRemovalHeaders(inventory, scopedState, headerSchemas);
         }
         bool changed = plan.changed, structural = plan.structural;
