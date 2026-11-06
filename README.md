@@ -50,6 +50,8 @@ Configuration is a JSON object using the existing resolved engine settings:
 
 Use actual absolute paths. `program` selects the test/class context; optional `files`, `methods`, `testDependencyScope`, `workingDatabaseDirectory`, `workingDatabaseGeneration` and `timeoutMilliseconds` retain existing engine meanings. Credentials are session inputs, not checked-in configuration. CLI results preserve native errors and diagnostics. Progress goes to stderr; final JSON goes to stdout. Exit codes are 0 success, 1 operation failure, 2 transport/configuration failure, and 130 reported cancellation.
 
+When a headered project selects a dependency from another schema, that schema must also have a `.scm` or `schemaDefinitions.sec` supplied in the workspace or `config.files`; otherwise the build fails before loading, rather than using a stale database definition.
+
 ## Native ownership and private state
 
 Compile/test loads local changes into an independent Working database. Tests execute afresh; reusing a native session does not reuse old test results. Public publication commands are not exposed in this release.

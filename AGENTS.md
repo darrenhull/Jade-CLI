@@ -71,3 +71,7 @@ These rules are not exhaustive. Review the complete change and its affected call
 - Check that Source cannot be changed by build/test/read-only inspection and that native ownership and target identity cannot be bypassed or confused.
 - Check performance evidence and ensure ordinary navigation, single-file operations and paged lookups do not unexpectedly trigger expensive project-wide work.
 - Check release/update automation for unreviewed publication, unverified downloads, stale integrity and silently skipped failures.
+
+## Automated PR comments
+
+Post automated PR comments through GitHub Actions or an authorized GitHub App so they use the bot identity. Include attribution that Codex prepared the comment on behalf of @darrenhull. The user-authenticated GitHub connector posts as the user; do not use it for future automated comments or imply that it is a bot. If a bot-backed path is unavailable, report that limitation instead of impersonating a bot.

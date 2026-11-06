@@ -387,6 +387,11 @@ ProjectModel ProjectModel::select(const std::vector<std::filesystem::path> &file
     return selected;
 }
 json ProjectModel::inventory() const {
+    if (!schemas.empty() && !loose.empty())
+        throw std::runtime_error(
+            "Missing schema header for " + loose.front().model.schema + " (" +
+            utf8(loose.front().file.wstring()) +
+            "). Include its .scm or schemaDefinitions.sec in the workspace or config.files.");
     json values = json::object();
     for (auto &s : schemas) {
         values[pathKey(s.header.file)] = {{"hash", s.header.hash},
