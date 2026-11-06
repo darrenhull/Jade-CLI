@@ -39,7 +39,7 @@ function gh {
         if (!(Get-Content -LiteralPath $payloadPath -Raw|ConvertFrom-Json).draft) { throw 'New work-in-progress pull requests must be drafts.' }
         $script:createdPosts++; return ($script:pull | ConvertTo-Json -Depth 10 -Compress)
     }
-    if ($endpoint -like '*/requested_reviewers') { $script:pull.requested_reviewers = @(@{login='darrenhull'}); return ($script:pull | ConvertTo-Json -Depth 10 -Compress) }
+    if ($endpoint -like '*/requested_reviewers') { throw 'Draft work must not request owner review.' }
     if ($endpoint -eq 'repos/darrenhull/Jade-CLI/pulls/7') { return ($script:pull | ConvertTo-Json -Depth 10 -Compress) }
     throw "Unexpected mocked GitHub request: $($argsText -join ' ')"
 }
@@ -54,7 +54,7 @@ try {
         $outputs = [IO.File]::ReadAllText($env:GITHUB_OUTPUT).Replace("`r`n", "`n")
         if ($outputs -notmatch '(?m)^number=7$') { throw 'Verified PR identity output was lost.' }
         if ($script:createdPosts -ne [int](!$reuse)) { throw 'Existing PR reuse must not post a second PR.' }
-        if ($script:pull.requested_reviewers[0].login -ne 'darrenhull') { throw 'Human review was not requested.' }
+        if ($script:pull.requested_reviewers.Count -ne 0) { throw 'Draft work must not request owner review.' }
         if (!$script:pull.draft -or $script:draftConversions -ne [int]$reuse) { throw 'New and reused work must remain draft until implementation, checks and review fixes are complete.' }
     }
     Write-Output 'CLI main/PR event policy and bot new/reuse reviewer contracts passed.'

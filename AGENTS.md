@@ -77,3 +77,6 @@ These rules are not exhaustive. Review the complete change and its affected call
 ## Automated PR comments
 
 Post automated PR comments through GitHub Actions or an authorized GitHub App so they use the bot identity. Include attribution that Codex prepared the comment on behalf of @darrenhull. The user-authenticated GitHub connector posts as the user; do not use it for future automated comments or imply that it is a bot. If a bot-backed path is unavailable, report that limitation instead of impersonating a bot.
+
+Do not request owner review or enable auto-merge while a pull request is Draft. Request owner review only after implementation, checks, and review fixes are complete and the pull request is explicitly marked ready.
+

@@ -106,19 +106,7 @@ jobs:
             $verified = $draftJson | ConvertFrom-Json
             if (-not $verified.draft) { throw 'Work in progress must remain a draft.' }
           }
-          if (@($verified.requested_reviewers | Where-Object { $_.login -eq $env:REVIEWER }).Count -eq 0) {
-            $payload = Join-Path $env:RUNNER_TEMP ('agent-reviewer-' + [guid]::NewGuid().ToString('N') + '.json')
-            try {
-              [IO.File]::WriteAllText($payload, (@{ reviewers = @($env:REVIEWER) } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
-              $reviewJson = gh api --method POST "repos/$repository/pulls/$number/requested_reviewers" --input $payload
-              if ($LASTEXITCODE -ne 0) { throw 'Could not request the human owner review.' }
-              $review = $reviewJson | ConvertFrom-Json
-              if (@($review.requested_reviewers | Where-Object { $_.login -eq $env:REVIEWER }).Count -ne 1) { throw 'The requested human reviewer could not be verified.' }
-            } finally {
-              if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload }
-            }
-          }
           "url=$($verified.html_url)" >> $env:GITHUB_OUTPUT
           "number=$number" >> $env:GITHUB_OUTPUT
           $sourceSummary = if ($env:SOURCE_PR -eq '0') { 'Context comes from the final commit.' } else { "Original PR #$env:SOURCE_PR remains open." }
-          "GitHub Actions App draft PR: $($verified.html_url). Human reviewer: @$env:REVIEWER. Keep draft until implementation, checks and review fixes are complete; this push does not mark it ready or queue a merge. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY
+          "GitHub Actions App draft PR: $($verified.html_url). Owner review is requested only after readiness is verified. Keep draft until implementation, checks and review fixes are complete; this push does not mark it ready or queue a merge. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY
