@@ -314,6 +314,7 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
         if (changed) {
             writeText(stateFile, "{}");
             json loaded;
+            std::vector<SourceEntry> nativeSources;
             std::filesystem::path staging =
                 pathOf(working, "assemblyRoot") / uniqueId().substr(0, 8);
             if (structural && !project.schemas.empty()) {
@@ -337,6 +338,11 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
                         throw std::runtime_error("Native schema rejoin failed for " + s.name +
                                                  ". " + joined.output);
                     auto assembled = SourceModel::parse(readText(s.joined), strPath(s.joined));
+                    SourceEntry joinedSource;
+                    joinedSource.file = s.joined;
+                    joinedSource.text = assembled.text;
+                    joinedSource.model = assembled;
+                    nativeSources.push_back(std::move(joinedSource));
                     std::set<std::string> names;
                     for (auto &c : assembled.classes)
                         names.insert(c.name);
@@ -381,6 +387,9 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
                         continue;
                     auto target = directory / (std::to_string(index++) + ".cls");
                     stageSourceFile(e, target);
+                    auto stagedSource = e;
+                    stagedSource.file = target;
+                    nativeSources.push_back(std::move(stagedSource));
                     mul += strPath(target.filename()) + "\r\n";
                     if (output)
                         output("Loading and compiling " + strPath(e.file) +
@@ -399,7 +408,9 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
                 report["incremental"] = !structural;
             }
             auto nativeOutput = loaded.value("output", "");
-            report["diagnostics"] = NativeReports::diagnostics(nativeOutput, sources);
+            sources.insert(sources.end(), nativeSources.begin(), nativeSources.end());
+            report["diagnostics"] = NativeReports::diagnostics(
+                nativeOutput + "\n" + loaded.value("compilerOutput", ""), sources);
             if (!report["diagnostics"].empty()) {
                 loaded["success"] = false;
                 if (loaded.value("code", 0) == 0)
