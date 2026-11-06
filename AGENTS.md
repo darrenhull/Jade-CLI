@@ -55,6 +55,8 @@ This repository owns the native C++ jade-cli executable, per-user broker, build/
 
 ## Builds, releases and maintenance
 
+- Open work-in-progress PRs as drafts and return them to draft when further changes are needed. Keep them draft until implementation, required checks and review findings are complete. A code push must not automatically mark a PR ready or queue its merge; readiness is a separate reviewed transition. Required owner approval and protected-branch checks still apply.
+
 - Independent checkouts must build from committed native inputs and declared toolchain/dependency versions.
 - Exclude credentials, user configuration, databases, caches, logs and research notes from Git. Track requested diagrams and build-required source, tests and notices.
 - Pin toolchains/dependencies and test the actual portable artifact outside the checkout without Node on PATH.

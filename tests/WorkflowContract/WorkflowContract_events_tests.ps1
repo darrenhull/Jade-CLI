@@ -21,9 +21,11 @@ function gh {
     $global:LASTEXITCODE = 0
     $argsText = @($Arguments | ForEach-Object { [string]$_ })
     if ($argsText[0] -eq 'pr' -and $argsText[1] -eq 'merge') {
-        if ($argsText -contains '--admin' -or $argsText -notcontains '--auto' -or $argsText -notcontains '--squash' -or $argsText -notcontains '--match-head-commit') { throw 'Auto-merge must preserve review/check gates and match the verified head.' }
-        if ($argsText[[array]::IndexOf($argsText,'--match-head-commit')+1] -ne $script:pull.head.sha -or $script:pull.requested_reviewers[0].login -ne 'darrenhull') { throw 'Auto-merge was queued before head/reviewer verification.' }
-        $script:mergeCalls++;return
+        throw 'Work-in-progress pull requests must not queue automatic merge.'
+    }
+    if ($argsText[0] -eq 'pr' -and $argsText[1] -eq 'ready') {
+        if ($argsText -notcontains '--undo') { throw 'A code push must never mark work ready for review.' }
+        $script:pull.draft=$true; $script:draftConversions++; return
     }
     $method = if ($argsText -contains '--method') { $argsText[[array]::IndexOf($argsText,'--method')+1] } else { 'GET' }
     $endpoint = @($argsText | Where-Object { $_ -like 'repos/*' })[0]
@@ -32,7 +34,11 @@ function gh {
         return ConvertTo-Json -InputObject @($script:pull) -Depth 10 -Compress
     }
     if ($endpoint -like '*/commits/*') { return '{"commit":{"message":"Native workflow change\n\nValidated native workflow policy."}}' }
-    if ($method -eq 'POST' -and $endpoint -eq 'repos/darrenhull/Jade-CLI/pulls') { $script:createdPosts++; return ($script:pull | ConvertTo-Json -Depth 10 -Compress) }
+    if ($method -eq 'POST' -and $endpoint -eq 'repos/darrenhull/Jade-CLI/pulls') {
+        $payloadPath=$argsText[[array]::IndexOf($argsText,'--input')+1]
+        if (!(Get-Content -LiteralPath $payloadPath -Raw|ConvertFrom-Json).draft) { throw 'New work-in-progress pull requests must be drafts.' }
+        $script:createdPosts++; return ($script:pull | ConvertTo-Json -Depth 10 -Compress)
+    }
     if ($endpoint -like '*/requested_reviewers') { $script:pull.requested_reviewers = @(@{login='darrenhull'}); return ($script:pull | ConvertTo-Json -Depth 10 -Compress) }
     if ($endpoint -eq 'repos/darrenhull/Jade-CLI/pulls/7') { return ($script:pull | ConvertTo-Json -Depth 10 -Compress) }
     throw "Unexpected mocked GitHub request: $($argsText -join ' ')"
@@ -40,8 +46,8 @@ function gh {
 try {
     foreach ($entry in @{GITHUB_EVENT_NAME='push';GITHUB_ACTOR='darrenhull';GITHUB_REPOSITORY='darrenhull/Jade-CLI';GITHUB_REF='refs/heads/codex/agent/workflow-contract';GITHUB_SHA=('a'*40);GITHUB_RUN_ID='123';RUNNER_TEMP=$temporary;DEFAULT_BRANCH='main';SOURCE_PR='0';REVIEWER='darrenhull'}.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key,$entry.Value,'Process') }
     foreach ($reuse in @($false,$true)) {
-        $script:existing = $reuse; $script:createdPosts = 0; $script:mergeCalls = 0
-        $script:pull = @{number=7;html_url='https://github.com/darrenhull/Jade-CLI/pull/7';user=@{login='github-actions[bot]';type='Bot'};head=@{ref='codex/agent/workflow-contract';sha=('a'*40);repo=@{full_name='darrenhull/Jade-CLI'}};base=@{ref='main'};requested_reviewers=@()}
+        $script:existing = $reuse; $script:createdPosts = 0; $script:draftConversions = 0
+        $script:pull = @{number=7;html_url='https://github.com/darrenhull/Jade-CLI/pull/7';user=@{login='github-actions[bot]';type='Bot'};head=@{ref='codex/agent/workflow-contract';sha=('a'*40);repo=@{full_name='darrenhull/Jade-CLI'}};base=@{ref='main'};requested_reviewers=@();draft=(!$reuse)}
         $env:GITHUB_OUTPUT = Join-Path $temporary ('output-' + $reuse + '.txt')
         $env:GITHUB_STEP_SUMMARY = Join-Path $temporary ('summary-' + $reuse + '.txt')
         & ([scriptblock]::Create($scriptText))
@@ -49,7 +55,7 @@ try {
         if ($outputs -notmatch '(?m)^number=7$') { throw 'Verified PR identity output was lost.' }
         if ($script:createdPosts -ne [int](!$reuse)) { throw 'Existing PR reuse must not post a second PR.' }
         if ($script:pull.requested_reviewers[0].login -ne 'darrenhull') { throw 'Human review was not requested.' }
-        if ($script:mergeCalls -ne 1) { throw 'The verified bot PR must queue squash auto-merge behind required reviews/checks.' }
+        if (!$script:pull.draft -or $script:draftConversions -ne [int]$reuse) { throw 'New and reused work must remain draft until implementation, checks and review fixes are complete.' }
     }
     Write-Output 'CLI main/PR event policy and bot new/reuse reviewer contracts passed.'
 } finally {
