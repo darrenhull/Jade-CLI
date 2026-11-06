@@ -18,6 +18,7 @@ struct SourceEntry {
     std::string extension, text, hash, shape;
     SourceModel model;
 };
+void stageSourceFile(const SourceEntry &source, const std::filesystem::path &target);
 struct ProjectSchema {
     std::string name, parent;
     std::filesystem::path folder, directory, joined, ddx;
@@ -30,7 +31,8 @@ class ProjectModel {
     std::vector<SourceEntry> loose, migrations;
     std::filesystem::path stageDirectory;
     static std::vector<std::filesystem::path> listFiles(const std::filesystem::path &root);
-    static ProjectModel scan(const std::vector<std::filesystem::path> &roots);
+    static ProjectModel scan(const std::vector<std::filesystem::path> &roots,
+                             const std::vector<std::filesystem::path> &explicitFiles = {});
     ProjectModel dependencies(const std::filesystem::path &program) const;
     ProjectModel select(const std::vector<std::filesystem::path> &files) const;
     json inventory() const;

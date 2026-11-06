@@ -1,4 +1,5 @@
 #include "NativeProcess.hpp"
+#include "NativeTimeout.hpp"
 #include <chrono>
 #include <stdexcept>
 namespace jade::native {
@@ -236,7 +237,7 @@ std::string NativeProcess::line(std::atomic_bool *cancelled, unsigned timeout,
         }
         if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(timeout)) {
             stop();
-            throw std::runtime_error("Native request timed out.");
+            throw NativeTimeout("Native request timed out.");
         }
         pump(
             [&](auto &s) {

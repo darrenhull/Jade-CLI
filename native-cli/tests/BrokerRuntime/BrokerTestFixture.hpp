@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <iostream>
 #include <optional>
+#include <set>
 
 class BrokerTestFixture {
   public:
@@ -55,6 +56,17 @@ class BrokerTestFixture {
             config,
             [](const nlohmann::json &request, auto output, std::atomic_bool *cancelled) {
                 const auto command = request.value("command", "");
+                static std::set<std::string> inspectionSessions;
+                if (command.starts_with("inspect.")) {
+                    const auto session = request.value("sessionId", "default");
+                    if (command == "inspect.close")
+                        inspectionSessions.erase(session);
+                    else
+                        inspectionSessions.insert(session);
+                }
+                if (command == "inspection-count")
+                    return nlohmann::json{
+                        {"code", 0}, {"passed", true}, {"count", inspectionSessions.size()}};
                 if (command == "crash") {
                     TerminateProcess(GetCurrentProcess(), 99);
                     throw std::runtime_error("unreachable");

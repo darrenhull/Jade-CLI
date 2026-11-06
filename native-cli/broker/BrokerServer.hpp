@@ -161,10 +161,9 @@ class BrokerServer {
             job->externalSession = job->request.value("sessionId", "default");
             const auto session = channel->owner + ":" + job->externalSession;
             job->request["sessionId"] = session;
-            if (command == "inspect.close")
-                channel->inspectionSessions.erase(session);
-            else
-                channel->inspectionSessions.insert(session);
+            // Keep ownership while a close is queued or can still be cancelled.
+            // Disconnect cleanup must still see the native session in that case.
+            channel->inspectionSessions.insert(session);
         }
         jobs[job->key] = job;
         queue.push_back(job);
@@ -253,6 +252,11 @@ class BrokerServer {
                                                 {"text", text}});
                         },
                         &job->cancelled);
+                    if (command == "inspect.close" && value.value("passed", false)) {
+                        std::lock_guard lock(mutex);
+                        job->channel->inspectionSessions.erase(
+                            job->request.at("sessionId").get<std::string>());
+                    }
                     if (value.contains("sessionId") && !job->externalSession.empty())
                         value["sessionId"] = job->externalSession;
                     if (job->cancelled) {

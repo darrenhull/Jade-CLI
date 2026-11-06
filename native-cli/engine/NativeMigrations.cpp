@@ -1,4 +1,5 @@
 #include "NativeMigrations.hpp"
+#include "NativeTimeout.hpp"
 #include "PrivateFile.hpp"
 #include <regex>
 namespace jade::native {
@@ -150,6 +151,8 @@ void NativeMigrations::apply(const ProjectModel &project, const json &working,
              L"server=singleUser", L"commandFile=" + command.wstring(),
              L"loadStyle=currentSchemaVersion", L"replayableReorg=true", L"ShowProgress=true"},
             root, cancelled, working.value("timeoutMilliseconds", 120000U), output);
+        if (result.timedOut)
+            throw NativeTimeout("Native class rename timed out.");
         if (!result.success())
             throw std::runtime_error("Native class rename failed (exit " +
                                      std::to_string(result.code) + "). " + result.output);

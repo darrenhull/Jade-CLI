@@ -6,6 +6,7 @@
 
 class BrokerTestChild {
     HANDLE process_ = nullptr, input_ = nullptr, output_ = nullptr;
+    std::string outputPending_;
 
   public:
     BrokerTestChild(const std::filesystem::path &executable,
@@ -76,5 +77,27 @@ class BrokerTestChild {
             Sleep(5);
         }
         return false;
+    }
+    bool waitForText(const std::string &text, unsigned milliseconds) {
+        const auto start = GetTickCount64();
+        while (GetTickCount64() - start < milliseconds) {
+            if (outputPending_.find(text) != std::string::npos)
+                return true;
+            DWORD available = 0;
+            if (!PeekNamedPipe(output_, nullptr, 0, nullptr, &available, nullptr))
+                return false;
+            if (available) {
+                char bytes[8192];
+                DWORD count = 0;
+                if (!ReadFile(output_, bytes, std::min<DWORD>(available, sizeof(bytes)), &count,
+                              nullptr))
+                    return false;
+                outputPending_.append(bytes, count);
+                if (outputPending_.size() > 256 * 1024)
+                    throw std::runtime_error("Fixture output exceeds its bounded wait budget.");
+            } else
+                Sleep(5);
+        }
+        return outputPending_.find(text) != std::string::npos;
     }
 };

@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
 #include <regex>
 int main() {
     auto seed = std::getenv("JADE_CPP_TEST_SEED");
@@ -159,6 +160,47 @@ int main() {
     auto scopedRecovery = engine.execute({{"command", "test"}, {"config", config}}, output);
     if (!scopedRecovery.value("passed", false))
         return 16;
+    auto encodedPet = jade::native::readText(pet);
+    encodedPet.replace(encodedPet.find("return self.name;"), 17, "return self.name & \"\";");
+    auto utf16Bytes = [](const std::string &text) {
+        std::string bytes("\xFF\xFE", 2);
+        for (auto value : jade::native::wide(text)) {
+            bytes += char(value & 255);
+            bytes += char((value >> 8) & 255);
+        }
+        return bytes;
+    };
+    jade::native::writeText(pet, utf16Bytes(encodedPet));
+    auto encodedBuild = engine.execute({{"command", "build"}, {"config", config}}, output);
+    if (!encodedBuild.value("passed", false) || !encodedBuild["report"].value("incremental", false))
+        return 17;
+    auto location = jade::native::WorkingEngine::workingLocation(config);
+    bool preserved = false;
+    for (auto &entry : std::filesystem::recursive_directory_iterator(
+             std::filesystem::path(jade::native::wide(location["root"])) / L"loads"))
+        if (entry.is_regular_file() && entry.path().extension() == L".cls") {
+            std::ifstream file(entry.path(), std::ios::binary);
+            std::string bytes((std::istreambuf_iterator<char>(file)), {});
+            if (bytes == utf16Bytes(encodedPet))
+                preserved = true;
+        }
+    if (!preserved)
+        return 18;
+    auto external = root / "external" / "CppExternalHelper.cls";
+    jade::native::writeText(external,
+                            "jadeVersionNumber \"25.0.02\";\nschemaDefinition\nSJetSchema "
+                            "subschemaOf RootSchema partialDefinition;\ntypeHeaders\n"
+                            "CppExternalHelper subclassOf Object transient;\ntypeDefinitions\n"
+                            "CppExternalHelper completeDefinition\n(\n)\ntypeSources\n");
+    encodedPet.insert(encodedPet.find("name: String[50];"), "buddy: CppExternalHelper;\n");
+    jade::native::writeText(pet, utf16Bytes(encodedPet));
+    config["files"] = jade::native::json::array({jade::native::utf8(external.wstring())});
+    auto externalBuild = engine.execute({{"command", "build"}, {"config", config}}, output);
+    if (!externalBuild.value("passed", false))
+        return 19;
+    auto externalTest = engine.execute({{"command", "test"}, {"config", config}}, output);
+    if (!externalTest.value("passed", false))
+        return 20;
     engine.disconnect();
     jade::native::writeText(root / "proof.json",
                             jade::native::json{{"config", config},
@@ -177,7 +219,10 @@ int main() {
                                                {"multiBuild", multiBuild},
                                                {"afterMulti", afterMulti},
                                                {"workspaceTest", workspaceTest},
-                                               {"scopedRecovery", scopedRecovery}}
+                                               {"scopedRecovery", scopedRecovery},
+                                               {"encodedBuild", encodedBuild},
+                                               {"externalBuild", externalBuild},
+                                               {"externalTest", externalTest}}
                                 .dump(2));
     std::cout << "Native C++ proof: " << jade::native::utf8(root.wstring()) << std::endl;
     return 0;

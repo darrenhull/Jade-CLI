@@ -57,8 +57,12 @@ class BrokerTestPipe {
             throw std::runtime_error("Cannot open the isolated fixture broker pipe.");
     }
     ~BrokerTestPipe() {
+        close();
+    }
+    void close() {
         if (pipe_ != INVALID_HANDLE_VALUE)
             CloseHandle(pipe_);
+        pipe_ = INVALID_HANDLE_VALUE;
     }
     bool write(const std::string &text) {
         size_t at = 0;

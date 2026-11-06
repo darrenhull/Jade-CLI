@@ -1,5 +1,6 @@
 #pragma once
 #include "BrokerClient.hpp"
+#include <iostream>
 namespace jade::native::broker {
 class BrokerService {
   public:
@@ -10,7 +11,21 @@ class BrokerService {
         std::condition_variable finished;
         std::map<std::string, json> ids;
         std::map<std::string, std::string> active;
-        std::atomic_bool closed = false, failed = false;
+        std::set<std::string> shutdownIds;
+        std::atomic_bool closed = false, failed = false, closing = false, readingInput = false;
+        bool shutdownConfirmed = false;
+        const bool nativeInput = &input == &std::cin;
+        HANDLE inputThreadHandle = nullptr;
+        if (nativeInput &&
+            !DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                             &inputThreadHandle, 0, FALSE, DUPLICATE_SAME_ACCESS))
+            throw windowsError("Cannot retain service input thread for cancellation");
+        const auto closeInputThread = [](void *handle) {
+            if (handle)
+                CloseHandle(handle);
+        };
+        const std::unique_ptr<void, decltype(closeInputThread)> inputThread(inputThreadHandle,
+                                                                            closeInputThread);
         unsigned sequence = 0;
         std::thread reader([&] {
             std::string reason = "Native broker connection closed before completing the request.";
@@ -26,6 +41,9 @@ class BrokerService {
                             original = it->second;
                             found = true;
                             if (packet.value("event", "") == "result") {
+                                if (shutdownIds.erase(it->first) &&
+                                    packet.at("result").value("passed", false))
+                                    shutdownConfirmed = true;
                                 active.erase(original.dump());
                                 ids.erase(it);
                                 finished.notify_all();
@@ -38,6 +56,8 @@ class BrokerService {
                         output << packet.dump() << '\n';
                         output.flush();
                     }
+                    if (shutdownConfirmed)
+                        break;
                 }
             } catch (const std::exception &error) {
                 reason = error.what();
@@ -45,7 +65,7 @@ class BrokerService {
             {
                 std::lock_guard stateLock(stateMutex);
                 std::lock_guard outputLock(outputMutex);
-                if (!ids.empty())
+                if (!ids.empty() || (!closing && !shutdownConfirmed))
                     failed = true;
                 for (const auto &[_, id] : ids)
                     output
@@ -60,10 +80,37 @@ class BrokerService {
             }
             closed = true;
             finished.notify_all();
+            // A single cancellation can race with getline starting its native
+            // read. Keep cancelling while that read is marked active, so broker
+            // loss also releases a service whose caller keeps stdin open.
+            while (nativeInput && readingInput) {
+                CancelSynchronousIo(inputThread.get());
+                const auto handle = GetStdHandle(STD_INPUT_HANDLE);
+                if (handle && handle != INVALID_HANDLE_VALUE)
+                    CancelIoEx(handle, nullptr);
+                Sleep(1);
+            }
         });
         try {
             std::string line;
-            while (std::getline(input, line)) {
+            while (!closed) {
+                readingInput = true;
+                if (closed) {
+                    readingInput = false;
+                    break;
+                }
+                bool received = false;
+                try {
+                    received = static_cast<bool>(std::getline(input, line));
+                } catch (...) {
+                    readingInput = false;
+                    if (!closed)
+                        throw;
+                    break;
+                }
+                readingInput = false;
+                if (!received || closed)
+                    break;
                 json request;
                 try {
                     if (line.size() > maximumPacket)
@@ -89,6 +136,10 @@ class BrokerService {
                     std::lock_guard lock(stateMutex);
                     const auto id = std::to_string(++sequence);
                     ids[id] = request["id"];
+                    if (request.value("command", "") == "shutdown" ||
+                        (request.value("command", "") == "cli" &&
+                         request.value("operation", "") == "shutdown"))
+                        shutdownIds.insert(id);
                     if (request.value("command", "") == "cancel") {
                         const auto key = request.value("operationId", json()).dump();
                         auto found = active.find(key);
@@ -106,6 +157,7 @@ class BrokerService {
                 finished.wait(lock, [&] { return ids.empty() || closed; });
             }
         } catch (...) {
+            closing = true;
             CancelIoEx(client.pipe, nullptr);
             CloseHandle(client.pipe);
             client.pipe = INVALID_HANDLE_VALUE;
@@ -113,6 +165,7 @@ class BrokerService {
                 reader.join();
             throw;
         }
+        closing = true;
         CancelIoEx(client.pipe, nullptr);
         CloseHandle(client.pipe);
         client.pipe = INVALID_HANDLE_VALUE;

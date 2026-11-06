@@ -24,7 +24,8 @@ $library=Join-Path $build 'jade-native-cli.lib'
 if($LASTEXITCODE -ne 0){throw 'Native library archive failed'}
 if((Get-NativeInputStamp) -ne $inputStamp){throw 'Native source changed during compilation. Rerun after edits finish.'}
 if(-not $SkipTests){
-    $tests=@(Get-ChildItem (Join-Path $root 'native-cli') -Filter '*_tests.cpp' -Recurse | Where-Object {$_.FullName -match '[\\/]tests[\\/]' -and $_.BaseName -like $TestFilter})
+    $testRoots=@((Join-Path $root 'native-cli'), (Join-Path $root 'native-src/inspector/tests'))
+    $tests=@($testRoots | Where-Object {Test-Path -LiteralPath $_} | ForEach-Object {Get-ChildItem -LiteralPath $_ -Filter '*_tests.cpp' -Recurse} | Where-Object {$_.FullName -match '[\\/]tests[\\/]' -and $_.BaseName -like $TestFilter})
     if(-not $tests.Count){throw 'No native tests found'}
     foreach($test in $tests){
         $name=$test.BaseName

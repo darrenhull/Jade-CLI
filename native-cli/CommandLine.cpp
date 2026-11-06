@@ -89,12 +89,16 @@ PreparedCommand CommandLine::prepare(const std::string &command,
             throw std::runtime_error("Configuration must be a JSON object.");
     }
     const auto base = result.configFile.empty() ? cwd : result.configFile.parent_path();
-    for (const auto *key :
-         {"installPath", "databasePath", "iniPath", "storagePath", "program", "workspace"})
+    for (const auto *key : {"installPath", "databasePath", "iniPath", "storagePath", "program",
+                            "workspace", "workingDatabaseDirectory"})
         if (result.config.contains(key)) {
             if (!result.config[key].is_string())
                 throw std::runtime_error(std::string("Configuration path must be a string: ") +
                                          key);
+            if (result.config[key].get_ref<const std::string &>().empty()) {
+                result.config.erase(key);
+                continue;
+            }
             result.config[key] = text(absolute(base, result.config[key]));
         }
     for (const auto *key : {"workspaceRoots", "files"})

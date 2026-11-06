@@ -7,11 +7,14 @@
 #include <sstream>
 #include <iomanip>
 namespace jade::native {
-std::string readText(const std::filesystem::path &file) {
+static std::string readBytes(const std::filesystem::path &file) {
     std::ifstream f(file, std::ios::binary);
     if (!f)
         throw std::runtime_error("Cannot read " + utf8(file.wstring()));
     std::string s((std::istreambuf_iterator<char>(f)), {});
+    return s;
+}
+static std::string decodeText(std::string s) {
     if (s.starts_with("\xFF\xFE")) {
         std::wstring w;
         for (size_t i = 2; i + 1 < s.size(); i += 2)
@@ -22,6 +25,9 @@ std::string readText(const std::filesystem::path &file) {
     if (s.starts_with("\xEF\xBB\xBF"))
         s.erase(0, 3);
     return s;
+}
+std::string readText(const std::filesystem::path &file) {
+    return decodeText(readBytes(file));
 }
 void writeText(const std::filesystem::path &file, const std::string &text) {
     std::filesystem::create_directories(file.parent_path());
@@ -67,11 +73,25 @@ std::string uniqueId() {
     return out.str();
 }
 std::string pathKey(const std::filesystem::path &file) {
-    auto result =
-        utf8(std::filesystem::weakly_canonical(std::filesystem::absolute(file)).wstring());
-    std::transform(result.begin(), result.end(), result.begin(),
-                   [](unsigned char c) { return char(std::tolower(c)); });
-    return result;
+    auto value = std::filesystem::weakly_canonical(std::filesystem::absolute(file)).wstring();
+    // Use the Windows ordinal uppercase table rather than linguistic casing.
+    // Filesystem path identities are not language-aware text comparisons.
+    auto count = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, value.data(),
+                               int(value.size()), nullptr, 0, nullptr, nullptr, 0);
+    if (!count)
+        throw std::runtime_error("Cannot normalize a Windows source path.");
+    std::wstring folded(count, 0);
+    if (!LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, value.data(), int(value.size()),
+                       folded.data(), count, nullptr, nullptr, 0))
+        throw std::runtime_error("Cannot normalize a Windows source path.");
+    return utf8(folded);
+}
+void stageSourceFile(const SourceEntry &source, const std::filesystem::path &target) {
+    auto bytes = readBytes(source.file);
+    if (source.hash.empty() || sha256(bytes) != source.hash)
+        throw std::runtime_error("Source changed while preparing native load. Compile again: " +
+                                 utf8(source.file.wstring()));
+    writeText(target, bytes);
 }
 bool contains(const std::filesystem::path &root, const std::filesystem::path &child) {
     auto a = pathKey(root), b = pathKey(child);
@@ -124,8 +144,9 @@ static SourceEntry entry(const std::filesystem::path &file) {
     e.extension = utf8(file.extension().wstring());
     std::transform(e.extension.begin(), e.extension.end(), e.extension.begin(),
                    [](unsigned char c) { return char(std::tolower(c)); });
-    e.text = readText(file);
-    e.hash = sha256(e.text);
+    auto bytes = readBytes(file);
+    e.text = decodeText(bytes);
+    e.hash = sha256(bytes);
     e.model = SourceModel::parse(e.text, utf8(file.wstring()));
     auto marker = sectionStart(e.model.code, "typeSources");
     json signatures = json::array();
@@ -135,7 +156,8 @@ static SourceEntry entry(const std::filesystem::path &file) {
                      signatures.dump());
     return e;
 }
-ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots) {
+ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots,
+                                const std::vector<std::filesystem::path> &explicitFiles) {
     ProjectModel p;
     std::vector<SourceEntry> entries;
     std::set<std::string> known;
@@ -143,6 +165,12 @@ ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots)
         for (auto &file : listFiles(root))
             if (known.insert(pathKey(file)).second)
                 entries.push_back(entry(file));
+    for (auto &file : explicitFiles) {
+        if (!std::filesystem::is_regular_file(file))
+            throw std::runtime_error("Source dependency is not a file: " + utf8(file.wstring()));
+        if (known.insert(pathKey(file)).second)
+            entries.push_back(entry(std::filesystem::absolute(file)));
+    }
     std::map<std::string, size_t> names;
     for (auto &e : entries)
         if (e.extension == ".scm" || e.file.filename() == L"schemaDefinitions.sec") {

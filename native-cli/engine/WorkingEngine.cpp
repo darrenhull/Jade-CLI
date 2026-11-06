@@ -3,6 +3,7 @@
 #include "NativeMigrations.hpp"
 #include "PrivateFile.hpp"
 #include "InputInventory.hpp"
+#include "NativeTimeout.hpp"
 #include <algorithm>
 #include <fstream>
 #include <regex>
@@ -195,6 +196,8 @@ json WorkingEngine::prepare(const json &config, Output output, std::atomic_bool 
     NativeProcess backup;
     auto result = backup.run(install / L"bin" / (online ? L"jdbadmin.exe" : L"jdbutilb.exe"), args,
                              root, cancelled, timeoutOf(config), output);
+    if (result.timedOut)
+        throw NativeTimeout("Native database backup timed out.");
     if (!result.success())
         throw std::runtime_error("Native database backup failed (exit " +
                                  std::to_string(result.code) + "). " + result.output);
@@ -207,6 +210,8 @@ json WorkingEngine::prepare(const json &config, Output output, std::atomic_bool 
                           L"backupDir=" + (root / L"backup").wstring(), L"noRecovery",
                           L"clearFilePaths", L"verify", L"nostatus"},
                          root, cancelled, timeoutOf(config), output);
+    if (result.timedOut)
+        throw NativeTimeout("Native working database restore timed out.");
     if (!result.success() ||
         !std::filesystem::exists(pathOf(working, "databasePath") / L"_control.dat"))
         throw std::runtime_error("Native working database restore failed (exit " +
@@ -270,7 +275,10 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
         for (auto &value :
              config.value("workspaceRoots", json::array({strPath(program.parent_path())})))
             roots.emplace_back(wide(value.get<std::string>()));
-        auto project = ProjectModel::scan(roots);
+        std::vector<std::filesystem::path> explicitFiles;
+        for (auto &file : config.value("files", json::array()))
+            explicitFiles.emplace_back(wide(file.get<std::string>()));
+        auto project = ProjectModel::scan(roots, explicitFiles);
         bool test = request.at("command") == "test" || request.at("command") == "test.run";
         bool fullBuild = !test && config.value("projectBuild", false);
         if (test && config.value("testDependencyScope", "dependencies") != "workspace")
@@ -323,6 +331,8 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
                          L"schema=JadeSchema", L"app=JadeJoinSchema", L"startAppParameters",
                          s.directory.wstring(), s.joined.wstring(), L"endAppParameters"},
                         staging, cancelled, timeoutOf(config), output);
+                    if (joined.timedOut)
+                        throw NativeTimeout("Native schema rejoin timed out for " + s.name + ".");
                     if (!joined.success() || !std::filesystem::is_regular_file(s.joined))
                         throw std::runtime_error("Native schema rejoin failed for " + s.name +
                                                  ". " + joined.output);
@@ -370,7 +380,7 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
                     if (e.extension != ".cls")
                         continue;
                     auto target = directory / (std::to_string(index++) + ".cls");
-                    writeText(target, e.text);
+                    stageSourceFile(e, target);
                     mul += strPath(target.filename()) + "\r\n";
                     if (output)
                         output("Loading and compiling " + strPath(e.file) +
@@ -473,9 +483,11 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
         report["success"] = false;
         report["error"] = error.what();
         bool aborted = cancelled && cancelled->load();
+        bool timedOut = dynamic_cast<const NativeTimeout *>(&error) != nullptr;
         return {{"passed", false},
                 {"code", aborted ? 130 : 2},
                 {"cancelled", aborted},
+                {"timedOut", timedOut},
                 {"report", report}};
     }
 }
