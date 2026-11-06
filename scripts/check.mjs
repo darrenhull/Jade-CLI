@@ -1,12 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import release from './prepare-release.cjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const readJson = file => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
 const manifest = readJson('package.json');
-if (manifest.name !== 'jade-tools-cli' || manifest.version !== '0.1.0' || manifest.private !== true)
+if (manifest.name !== 'jade-tools-cli' || manifest.private !== true)
   throw new Error('Unexpected CLI package identity/version/private flag.');
+release.validateVersion(manifest.version);
+if (readJson('sdk/package.json').version !== manifest.version)
+  throw new Error('The SDK and CLI package versions must match.');
 if (manifest.bin?.['jade-cli'] !== 'bin/jade-cli.js')
   throw new Error('CLI executable mapping is missing.');
 for (const file of ['bin/jade-cli.js', 'sdk/index.js', 'sdk/broker.js', 'sdk/broker-client.js', 'sdk/native/jade-test-helper.exe', 'sdk/native/jade-inspect-helper.exe', 'sdk/native/jade-debug-helper.exe', 'sdk/native/jade-native-helper.exe', 'sdk/vendor/sax.LICENSE.md'])

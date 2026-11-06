@@ -1,9 +1,10 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),crypto=require('node:crypto'),readline=require('node:readline'),cp=require('node:child_process');
 const {prepare,fingerprint}=require('./broker-client');
+const {version:sdkVersion}=require('./package.json');
 async function run(){
  const state=prepare(),secret=fs.readFileSync(state.token,'utf8');const nativeChildren=new Map(),connections=new Set(),jobs=new Map(),helpers=new Map();let serial=Promise.resolve(),stopping=false,reservedHelper;
- const save=()=>fs.writeFileSync(state.owner,JSON.stringify({brokerPID:process.pid,nativePIDs:[...nativeChildren.keys()],sdkVersion:'0.1.0'}));
+ const save=()=>fs.writeFileSync(state.owner,JSON.stringify({brokerPID:process.pid,nativePIDs:[...nativeChildren.keys()],sdkVersion}));
  const originalSpawn=cp.spawn;cp.spawn=function(...args){const child=originalSpawn(...args);if(child.pid){nativeChildren.set(child.pid,child);save();child.once('close',()=>{nativeChildren.delete(child.pid);save();});}return child;};
  // Load native adapters after tracking is installed so a crashed broker cannot
  // silently forget a surviving native database owner.
@@ -16,7 +17,7 @@ async function run(){
   socket.on('data',chunk=>{bytes+=chunk.length;if(bytes>32*1024*1024)socket.destroy();});
   lines.on('line',line=>{bytes=0;let request;try{request=JSON.parse(line);const supplied=Buffer.from(String(request.token||'')),expected=Buffer.from(secret);if(supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected))throw Error('Broker authentication failed.');delete request.token;}catch{socket.destroy();return;}
    const id=String(request.id),key=owner+':'+id;const result=value=>send({id,event:'result',result:value});
-   if(request.command==='status'){result({code:0,passed:true,brokerPID:process.pid,nativePIDs:[...nativeChildren.keys()],activeJobs:[...jobs.values()].map(j=>({id:j.id,state:j.state})),sdkVersion:'0.1.0',fingerprint:fingerprint()});return;}
+   if(request.command==='status'){result({code:0,passed:true,brokerPID:process.pid,nativePIDs:[...nativeChildren.keys()],activeJobs:[...jobs.values()].map(j=>({id:j.id,state:j.state})),sdkVersion,fingerprint:fingerprint()});return;}
    if(request.command!=='shutdown'&&request.fingerprint!==fingerprint()){result({code:2,passed:false,report:{error:'Jade SDK broker artifact fingerprint mismatch. Finish active operations and restart the broker.'}});return;}
    if(request.command==='cancel'){const target=owner+':'+request.operationId,job=jobs.get(target);if(job){job.cancelled=true;engine.cancel(target);}result({code:0,passed:true,cancelled:!!job});return;}
    if(request.command==='helper.write'||request.command==='helper.end'){const h=helpers.get(request.lease);if(!h||h.owner!==owner){result({code:2,passed:false,report:{error:'Native helper lease is not owned by this client.'}});return;}if(request.command==='helper.end')h.child.stdin.end();else if(typeof request.text==='string'&&!h.child.stdin.destroyed)h.child.stdin.write(request.text);return;}

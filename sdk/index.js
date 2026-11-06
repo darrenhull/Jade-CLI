@@ -17,7 +17,7 @@ class JadeEngine{
  async execute(request,output=()=>{},id=crypto.randomUUID()){
   const command=request.command,config={...request.config};
   if(command==='disconnect'){await this.release();return {code:0,passed:true};}
-  if(command==='doctor')return {code:0,passed:true,platform:process.platform,sdkVersion:'0.1.0',runtime:config.installPath||null,tools:Object.fromEntries(['jadclient','jadloadb','jdbutilb','jdbadmin'].map(n=>[n,!!config.installPath&&fs.existsSync(path.join(config.installPath,'bin',n+'.exe'))])),capabilities:{build:true,test:true,sourceSearch:true,inspection:true,nativeUtility:true,debug:false,publishPlan:false}};
+  if(command==='doctor')return {code:0,passed:true,platform:process.platform,sdkVersion:require('./package.json').version,runtime:config.installPath||null,tools:Object.fromEntries(['jadclient','jadloadb','jdbutilb','jdbadmin'].map(n=>[n,!!config.installPath&&fs.existsSync(path.join(config.installPath,'bin',n+'.exe'))])),capabilities:{build:true,test:true,sourceSearch:true,inspection:true,nativeUtility:true,debug:false,publishPlan:false}};
   if(command==='source.search'||command==='tests.list'){
    const files=await sourceFiles(config.workspaceRoots||[config.workspace||process.cwd()]);let rows;
    if(command==='tests.list')rows=testCatalog(files);else rows=files.flatMap(file=>{const model=parseSource(fs.readFileSync(file,'utf8'),file);return model.classes.map(c=>({schema:model.schema,name:c.name,source:file}));});
@@ -50,7 +50,24 @@ class JadeEngine{
   const identity=JSON.stringify([request.target||'working',target.installPath,target.databasePath,target.iniPath,target.server,target.schema,target.user].map(x=>typeof x==='string'?x.toLowerCase():x));
   if(this.inspections.has(sessionId)&&this.inspectionTargets.get(sessionId)!==identity)throw Error('Inspection target changed. Close the existing session before connecting to another database.');
   if(this.session)await this.session.release();let client=this.inspections.get(sessionId);
-  if(!client){const folder=path.join(os.tmpdir(),'jade-tools-inspection');fs.mkdirSync(folder,{recursive:true});const file=path.join(folder,crypto.randomUUID()+'.json');fs.writeFileSync(file,JSON.stringify({...target,readOnly:true}),{mode:0o600});client=new this.dependencies.InspectorTransport(path.join(__dirname,'native/jade-inspect-helper.exe'),file);client.on('failure',()=>{});try{await client.ready;this.inspections.set(sessionId,client);this.inspectionTargets.set(sessionId,identity);}catch(error){await client.stop();throw error;}finally{fs.rmSync(file,{force:true});}}
+  if(!client){
+   const folder=path.join(os.tmpdir(),'jade-tools-inspection');fs.mkdirSync(folder,{recursive:true});
+   const file=path.join(folder,crypto.randomUUID()+'.json');
+   fs.writeFileSync(file,JSON.stringify({...target,readOnly:true}),{mode:0o600});
+   try{
+    client=new this.dependencies.InspectorTransport(path.join(__dirname,'native/jade-inspect-helper.exe'),file);
+    // Native readers can retain a Windows file handle after ready. The SDK
+    // owns this temporary configuration until the process has actually exited.
+    const removeConfiguration=()=>fs.rmSync(file,{force:true});
+    void client.exited.then(removeConfiguration,removeConfiguration).catch(()=>{});
+    client.on('failure',()=>{});
+    await client.ready;this.inspections.set(sessionId,client);this.inspectionTargets.set(sessionId,identity);
+   }catch(error){
+    if(client){await client.stop().catch(()=>{});await client.exited.catch(()=>{});}
+    else fs.rmSync(file,{force:true});
+    throw error;
+   }
+  }
   const args={...request.args};if(args.limit!==undefined)args.limit=Math.min(100,Math.max(1,Number(args.limit)||100));return {code:0,passed:true,sessionId,body:await client.request(command,args)};
  }
 }

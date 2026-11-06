@@ -30,3 +30,9 @@ secrets/
 docs/
 ROADMAP.md
 *.tgz
+
+# Requested editable architecture documentation; keep other research notes ignored.
+!docs/
+docs/*
+!docs/architecture.drawio
+!docs/architecture.drawio.svg

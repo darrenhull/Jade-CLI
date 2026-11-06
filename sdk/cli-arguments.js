@@ -31,8 +31,11 @@ async function runCommand(prepared,execute){
  const request={command,config,query:values.query,limit:values.limit,offset:values.offset,target:values.target,args:values.args?JSON.parse(values.args):{}};
  if(!['build','test'].includes(command))return execute(request);
  if(command==='build')return execute({...request,config:{...config,program:files[0],files:prepared.projectBuild?files:[...new Set([...(config.files||[]),...files])]}});
+ const workspaceFiles=(await Promise.all(config.workspaceRoots.map(root=>require('./engine/native-project').listProjectFiles(root))))
+  .flat().filter(file=>path.extname(file).toLowerCase()==='.cls').sort();
+ const dependencyFiles=[...new Set([...(config.files||[]),...workspaceFiles,...files])];
  const results=[];
- for(const file of files){const result=await execute({...request,config:{...config,program:file,files:[...new Set([...(config.files||[]),...files])]}});results.push({file,result});if(result.cancelled)break;}
+ for(const file of files){const result=await execute({...request,config:{...config,program:file,files:dependencyFiles}});results.push({file,result});if(result.cancelled)break;}
  if(files.length===1)return results[0].result;
  return {passed:results.every(row=>row.result.passed!==false),code:results.find(row=>row.result.passed===false)?.result.code||0,cancelled:results.some(row=>row.result.cancelled),results};
 }

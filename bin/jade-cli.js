@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 'use strict';
+const {version}=require('../sdk/package.json');
 const fs=require('node:fs'),path=require('node:path'),readline=require('node:readline');
 let activeClient;
 async function main(){
  const argv=process.argv.slice(2),command=argv.shift();
  if(command==='broker')return require('../sdk/broker').run();
- if(!command||['help','--help','-h'].includes(command)){console.log('jade-cli 0.1.0\nCommands: doctor, build, test, tests list, source search, inspect catalog|instances|object|collection, status, disconnect, shutdown\nUsage: jade-cli build [file.cls ...]; jade-cli test <file.cls> [more.cls ...]\nBare build discovers project files and reuses unchanged native inputs.\nAutomatically discovers jade.json in this folder or its parents.\nOptions: --config <json> --workspace <folder> --query <text> --json\nIntegration: service --stdio; helper inspect|debug|compiler [session.json]\nBuild/test use an independent Working database. No publish command is exposed.');return;}
+ if(!command||['help','--help','-h'].includes(command)){console.log('jade-cli '+version+'\nCommands: doctor, build, test, tests list, source search, inspect catalog|instances|object|collection, status, disconnect, shutdown\nUsage: jade-cli build [file.cls ...]; jade-cli test <file.cls> [more.cls ...]\nBare build discovers project files and reuses unchanged native inputs.\nAutomatically discovers jade.json in this folder or its parents.\nOptions: --config <json> --workspace <folder> --query <text> --json\nIntegration: service --stdio; helper inspect|debug|compiler [session.json]\nBuild/test use an independent Working database. No publish command is exposed.');return;}
  const {prepareCommand,runCommand}=require('../sdk/cli-arguments');
  let prepared;if(!['service','helper'].includes(command)){let operation=command;if(['tests','source','inspect'].includes(command))operation+='.'+argv.shift();prepared=prepareCommand(operation,argv);}
  const {openClient}=require('../sdk/broker-client');const client=activeClient=await openClient({allowMismatch:command==='shutdown'||command==='status'});
