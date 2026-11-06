@@ -252,6 +252,14 @@ static std::string xml(std::string s) {
     return r;
 }
 json WorkingEngine::execute(const json &request, Output output, std::atomic_bool *cancelled) {
+    return executeImpl(request, nullptr, false, output, cancelled);
+}
+json WorkingEngine::executeProject(const json &request, ProjectModel project, bool completeScope,
+                                   Output output, std::atomic_bool *cancelled) {
+    return executeImpl(request, &project, completeScope, output, cancelled);
+}
+json WorkingEngine::executeImpl(const json &request, ProjectModel *preparedProject,
+                                bool completeScope, Output output, std::atomic_bool *cancelled) {
     json report = {{"compiled", false}, {"success", false}, {"diagnostics", json::array()}};
     try {
         auto config = request.at("config");
@@ -278,12 +286,14 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
         std::vector<std::filesystem::path> explicitFiles;
         for (auto &file : config.value("files", json::array()))
             explicitFiles.emplace_back(wide(file.get<std::string>()));
-        auto project = ProjectModel::scan(roots, explicitFiles);
+        auto project = preparedProject ? std::move(*preparedProject)
+                                       : ProjectModel::scan(roots, explicitFiles);
         bool test = request.at("command") == "test" || request.at("command") == "test.run";
         bool fullBuild = !test && config.value("projectBuild", false);
-        if (test && config.value("testDependencyScope", "dependencies") != "workspace")
+        if (!preparedProject && test &&
+            config.value("testDependencyScope", "dependencies") != "workspace")
             project = project.dependencies(program);
-        else if (!test && !fullBuild) {
+        else if (!preparedProject && !test && !fullBuild) {
             std::vector<std::filesystem::path> selected;
             for (auto &file : config.value("selectedFiles", json::array({strPath(program)})))
                 selected.emplace_back(wide(file.get<std::string>()));
@@ -304,7 +314,20 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
             sources.insert(sources.end(), s.classes.begin(), s.classes.end());
         }
         sources.insert(sources.end(), project.loose.begin(), project.loose.end());
-        auto plan = InputInventory::compare(inventory, state, fullBuild);
+        const auto scopedState =
+            completeScope ? InputInventory::withinSchemas(state, project.scopeSchemas) : state;
+        auto plan = InputInventory::compare(inventory, scopedState, fullBuild || completeScope);
+        if (completeScope && !plan.removedSchemas.empty())
+            throw std::runtime_error(
+                "A managed schema header was removed from the Workspace scope. Restore its header "
+                "or build the complete project before executing scratch code; scoped preparation "
+                "does not delete schemas.");
+        if (completeScope) {
+            std::set<std::string> headerSchemas;
+            for (const auto &schema : project.schemas)
+                headerSchemas.insert(schema.name);
+            InputInventory::requireRemovalHeaders(inventory, scopedState, headerSchemas);
+        }
         bool changed = plan.changed, structural = plan.structural;
         std::vector<SourceEntry> delta;
         std::set<std::string> changedKeys(plan.deltaKeys.begin(), plan.deltaKeys.end());
@@ -312,7 +335,10 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
             if (changedKeys.contains(pathKey(source.file)))
                 delta.push_back(source);
         if (changed) {
-            writeText(stateFile, "{}");
+            writeText(stateFile, completeScope ? InputInventory::replaceSchemas(
+                                                     state, json::object(), project.scopeSchemas)
+                                                     .dump(2)
+                                               : "{}");
             json loaded;
             std::vector<SourceEntry> nativeSources;
             std::filesystem::path staging =
@@ -372,7 +398,8 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
                               {L"schemaFile=" + batch.wstring(), L"loadStyle=currentSchemaVersion",
                                L"replayableReorg=true", L"dontSaveSources=false",
                                L"compileUnchangedMethods=true", L"allowCircularPackages=true",
-                               std::wstring(L"deleteIfAbsent=") + (fullBuild ? L"true" : L"false"),
+                               std::wstring(L"deleteIfAbsent=") +
+                                   ((fullBuild || completeScope) ? L"true" : L"false"),
                                L"ShowProgress=true"},
                               output, cancelled);
                 report["native_project"] = true;
@@ -424,7 +451,11 @@ json WorkingEngine::execute(const json &request, Output output, std::atomic_bool
             auto combined = state;
             for (auto &[key, value] : inventory.items())
                 combined[key] = value;
-            writeText(stateFile, (fullBuild ? inventory : combined).dump(2));
+            writeText(stateFile, (completeScope ? InputInventory::replaceSchemas(
+                                                      state, inventory, project.scopeSchemas)
+                                  : fullBuild   ? inventory
+                                                : combined)
+                                     .dump(2));
         } else {
             report["native_source_reused"] = true;
             report["loaded_files"] = 0;

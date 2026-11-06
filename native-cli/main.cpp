@@ -25,7 +25,8 @@ std::string help() {
            " (native C++)\nCommands: doctor, build, test, tests list, source search, "
            "inspect catalog|instances|object|collection, workspace run, init, status, disconnect, "
            "shutdown\nUsage: "
-           "jade-cli build [file.cls ...]; jade-cli test <file.cls> [more.cls ...]; jade-cli workspace run <file.jade> --schema <name>\nAutomatically "
+           "jade-cli build [file.cls ...]; jade-cli test <file.cls> [more.cls ...]; jade-cli "
+           "workspace run <file.jade> --schema <name>\nAutomatically "
            "discovers jade.json in this folder or its parents; missing build/test projects "
            "initialize automatically.\nSetup: jade-cli init --install C:\\Jade2025 [--profile "
            "local] [--database <folder>]\nOptions: --config <json> --profile <name> "
@@ -109,7 +110,8 @@ int wmain(int argc, wchar_t **argv) {
                                               std::cin, std::cout, std::cerr);
         }
         std::string operation = command;
-        if (command == "tests" || command == "source" || command == "inspect" || command == "workspace") {
+        if (command == "tests" || command == "source" || command == "inspect" ||
+            command == "workspace") {
             if (args.empty())
                 throw std::runtime_error("Subcommand required.");
             operation += '.' + args[0];

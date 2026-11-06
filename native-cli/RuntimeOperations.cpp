@@ -154,7 +154,8 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
     auto config = request.value("config", nlohmann::json::object());
     if (command != "cli" && command != "prepare" && command != "disconnect" &&
         command != "inspect.close") {
-        const bool connectionRequired = command == "build" || command == "test" || command == "workspace.run" ||
+        const bool connectionRequired = command == "build" || command == "test" ||
+                                        command == "workspace.run" ||
                                         command.starts_with("working.") ||
                                         command.starts_with("inspect.") || command == "native.run";
         config = ProjectConfiguration().resolve(

@@ -47,7 +47,7 @@ PreparedCommand CommandLine::prepare(const std::string &command,
     std::vector<fs::path> files;
     const std::set<std::string> options = {"config",   "workspace", "program", "query",   "limit",
                                            "offset",   "target",    "args",    "profile", "install",
-                                           "database", "ini",       "server", "schema"};
+                                           "database", "ini",       "server",  "schema"};
     for (size_t i = 0; i < argv.size(); ++i) {
         const auto &arg = argv[i];
         if (!positional && arg == "--") {
@@ -83,10 +83,12 @@ PreparedCommand CommandLine::prepare(const std::string &command,
         throw std::runtime_error(
             "Usage: jade-cli init [--profile <name>] [--install <Jade folder>]");
     for (auto &file : files)
-        if ((command == "build" || command == "test" || command == "workspace.run") && !fs::is_regular_file(file))
+        if ((command == "build" || command == "test" || command == "workspace.run") &&
+            !fs::is_regular_file(file))
             throw std::runtime_error("Source is not a file: " + text(file));
     if (command == "init" ||
-        (result.configFile.empty() && (command == "build" || command == "test" || command == "workspace.run"))) {
+        (result.configFile.empty() &&
+         (command == "build" || command == "test" || command == "workspace.run"))) {
         if (result.configFile.empty())
             result.configFile =
                 (result.values.contains("workspace") ? absolute(cwd, result.values["workspace"])
@@ -127,11 +129,14 @@ PreparedCommand CommandLine::prepare(const std::string &command,
         files.push_back(absolute(cwd, result.values["program"]));
     }
     if (!files.empty() && command != "build" && command != "test" && command != "workspace.run")
-        throw std::runtime_error("Source file arguments are supported by build, test and workspace run.");
+        throw std::runtime_error(
+            "Source file arguments are supported by build, test and workspace run.");
     if (command == "workspace.run" && files.size() > 1)
-        throw std::runtime_error("Workspace run accepts one source file or one exact sourceText snapshot.");
+        throw std::runtime_error(
+            "Workspace run accepts one source file or one exact sourceText snapshot.");
     result.projectBuild = command == "build" && files.empty();
-    if (files.empty() && command != "workspace.run" && !result.projectBuild && result.config.contains("program"))
+    if (files.empty() && command != "workspace.run" && !result.projectBuild &&
+        result.config.contains("program"))
         files.push_back(fs::u8path(result.config["program"].get<std::string>()));
     std::set<std::wstring> seen;
     for (const auto &file : files)
