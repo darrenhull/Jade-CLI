@@ -65,6 +65,16 @@ jobs:
           - Hosted CI uses the checked-in owned helper binaries. Rebuilding the C++ helpers or running connected Jade tests requires a Windows environment with the licensed Jade SDK/runtime; those checks are not claimed by this hosted run.
           '@ >> $env:GITHUB_STEP_SUMMARY
 
+  open-agent-pr:
+    if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/')
+    needs: build
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/open-agent-pr.yml
+    with:
+      source_pr: ${{ github.ref == 'refs/heads/codex/agent/ci-releases' && 1 || 0 }}
+
   release-guard:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     uses: ./.github/workflows/release-ancestry.yml

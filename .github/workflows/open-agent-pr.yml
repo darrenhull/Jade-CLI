@@ -1,0 +1,116 @@
+name: Open an agent pull request for human review
+
+on:
+  workflow_call:
+    inputs:
+      source_pr:
+        type: number
+        default: 0
+      reviewer:
+        type: string
+        default: darrenhull
+    outputs:
+      pull_request_url:
+        value: ${{ jobs.open.outputs.url }}
+      pull_request_number:
+        value: ${{ jobs.open.outputs.number }}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open:
+    if: github.event_name == 'push' && github.actor == 'darrenhull' && github.repository_owner == 'darrenhull' && startsWith(github.ref, 'refs/heads/codex/agent/') && contains(fromJSON('["darrenhull/Jade-CLI","darrenhull/Jade-VSCode-Extension","darrenhull/Jade-Local-MCP"]'), github.repository)
+    runs-on: windows-latest
+    timeout-minutes: 5
+    outputs:
+      url: ${{ steps.pr.outputs.url }}
+      number: ${{ steps.pr.outputs.number }}
+    steps:
+      - name: Open or reuse the verified bot pull request
+        id: pr
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_HOST: github.com
+          GH_PROMPT_DISABLED: '1'
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SOURCE_PR: ${{ inputs.source_pr }}
+          REVIEWER: ${{ inputs.reviewer }}
+        run: |
+          $allowed = @('darrenhull/Jade-CLI', 'darrenhull/Jade-VSCode-Extension', 'darrenhull/Jade-Local-MCP')
+          if ($env:GITHUB_EVENT_NAME -ne 'push' -or $env:GITHUB_ACTOR -ne 'darrenhull' -or $allowed -notcontains $env:GITHUB_REPOSITORY -or $env:GITHUB_REF -notmatch '^refs/heads/codex/agent/[A-Za-z0-9][A-Za-z0-9._/-]*$') {
+            throw 'Only the owner pushing an approved repository agent branch can open this pull request.'
+          }
+          if ($env:REVIEWER -ne 'darrenhull' -or $env:SOURCE_PR -notmatch '^(0|[1-9][0-9]*)$' -or -not $env:DEFAULT_BRANCH) {
+            throw 'A valid optional original pull request, default branch and owner reviewer are required.'
+          }
+          $repository = $env:GITHUB_REPOSITORY
+          $branch = $env:GITHUB_REF.Substring('refs/heads/'.Length)
+          $head = [uri]::EscapeDataString('darrenhull:' + $branch)
+          $listedJson = gh api "repos/$repository/pulls?state=open&head=$head&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check existing pull requests.' }
+          $parsed = $listedJson | ConvertFrom-Json
+          $listed = @()
+          foreach ($candidate in $parsed) { if ($null -ne $candidate) { $listed += $candidate } }
+          if ($listed.Count -gt 1) { throw 'More than one open pull request already uses this agent branch.' }
+          if ($listed.Count -eq 1) {
+            if ($listed[0].user.login -ne 'github-actions[bot]') { throw 'An existing human-authored pull request must remain unchanged; use a new agent branch.' }
+            $number = [int]$listed[0].number
+          } else {
+            if ($env:SOURCE_PR -ne '0') {
+              $originalJson = gh api "repos/$repository/pulls/$env:SOURCE_PR"
+              if ($LASTEXITCODE -ne 0) { throw 'Could not load the original pull request review context.' }
+              $original = $originalJson | ConvertFrom-Json
+              $title = [string]$original.title
+              $description = [string]$original.body
+              $context = 'Original review context: #' + $env:SOURCE_PR + '. The original PR remains open until this replacement has been verified.' + "`n`n---`n`n"
+            } else {
+              if ($env:GITHUB_SHA -notmatch '^[a-fA-F0-9]{40}$') { throw 'A valid final commit SHA is required.' }
+              $commitJson = gh api "repos/$repository/commits/$env:GITHUB_SHA"
+              if ($LASTEXITCODE -ne 0) { throw 'Could not load the final commit review context.' }
+              $commit = $commitJson | ConvertFrom-Json
+              $lines = ([string]$commit.commit.message).Replace("`r`n", "`n") -split "`n"
+              $title = $lines[0].Trim()
+              $description = if ($lines.Length -gt 1) { [string]::Join("`n", $lines[1..($lines.Length - 1)]).Trim() } else { '' }
+              $context = 'Review context: final commit ' + $env:GITHUB_SHA + ".`n`n"
+            }
+            if (-not $title -or $title.Length -gt 256) { throw 'The final commit or selected pull request must provide a concise title.' }
+            $attribution = "Prepared by Codex on behalf of @darrenhull.`nOpened by the GitHub Actions App (github-actions[bot]) so @darrenhull can review.`n`n"
+            $validation = "`n`nValidation run: https://github.com/$repository/actions/runs/$env:GITHUB_RUN_ID"
+            $request = @{ title = $title; body = $attribution + $context + $description + $validation; head = $branch; base = $env:DEFAULT_BRANCH; draft = $false }
+            $payload = Join-Path $env:RUNNER_TEMP ('agent-pr-' + [guid]::NewGuid().ToString('N') + '.json')
+            try {
+              [IO.File]::WriteAllText($payload, ($request | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+              $createdJson = gh api --method POST "repos/$repository/pulls" --input $payload
+              if ($LASTEXITCODE -ne 0) { throw 'Could not create the agent pull request.' }
+              $number = [int](($createdJson | ConvertFrom-Json).number)
+            } finally {
+              if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload }
+            }
+          }
+          if ($number -lt 1) { throw 'GitHub did not return a valid pull request number.' }
+          $verifiedJson = gh api "repos/$repository/pulls/$number"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not verify the pull request identity.' }
+          $verified = $verifiedJson | ConvertFrom-Json
+          if ($verified.user.login -ne 'github-actions[bot]' -or $verified.user.type -ne 'Bot') { throw 'The pull request bot author could not be verified.' }
+          if ($verified.head.ref -ne $branch -or $verified.head.repo.full_name -ne $repository -or $verified.base.ref -ne $env:DEFAULT_BRANCH -or $verified.html_url -ne "https://github.com/$repository/pull/$number") {
+            throw 'The pull request repository, branch or URL did not match the requested identity.'
+          }
+          if (@($verified.requested_reviewers | Where-Object { $_.login -eq $env:REVIEWER }).Count -eq 0) {
+            $payload = Join-Path $env:RUNNER_TEMP ('agent-reviewer-' + [guid]::NewGuid().ToString('N') + '.json')
+            try {
+              [IO.File]::WriteAllText($payload, (@{ reviewers = @($env:REVIEWER) } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+              $reviewJson = gh api --method POST "repos/$repository/pulls/$number/requested_reviewers" --input $payload
+              if ($LASTEXITCODE -ne 0) { throw 'Could not request the human owner review.' }
+              $review = $reviewJson | ConvertFrom-Json
+              if (@($review.requested_reviewers | Where-Object { $_.login -eq $env:REVIEWER }).Count -ne 1) { throw 'The requested human reviewer could not be verified.' }
+            } finally {
+              if (Test-Path -LiteralPath $payload) { Remove-Item -LiteralPath $payload }
+            }
+          }
+          "url=$($verified.html_url)" >> $env:GITHUB_OUTPUT
+          "number=$number" >> $env:GITHUB_OUTPUT
+          $sourceSummary = if ($env:SOURCE_PR -eq '0') { 'Context comes from the final commit.' } else { "Original PR #$env:SOURCE_PR remains open." }
+          "GitHub Actions App PR: $($verified.html_url). Human reviewer: @$env:REVIEWER. $sourceSummary" >> $env:GITHUB_STEP_SUMMARY
