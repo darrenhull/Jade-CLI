@@ -1,7 +1,7 @@
 param([string]$Seed=$env:JADE_OID_TEST_SEED,[string]$JadeHome=$env:JADE_HOME)
 $ErrorActionPreference='Stop'
 if(!$Seed -or !$JadeHome){throw 'Explicit disposable JADE_OID_TEST_SEED and licensed JADE_HOME are required.'}
-. (Join-Path $PSScriptRoot 'NativeOidFixture.ps1')
+. (Join-Path $PSScriptRoot '../NativeOidFixture/NativeOidFixture.ps1')
 Assert-NativeOidIniPaths -Text ([IO.File]::ReadAllText((Join-Path $Seed 'working.ini'))) -Seed $Seed
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 . (Join-Path $root 'scripts/NativeToolchain.ps1')

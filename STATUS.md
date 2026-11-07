@@ -1,81 +1,43 @@
 # Jade CLI status
 
-Implementation checkpoint: CLI 0.4.0, PR [#7](https://github.com/darrenhull/Jade-CLI/pull/7). Verified implementation baseline: `cc394ac` (this documentation checkpoint may follow it).
+Implementation checkpoint: native CLI 0.4.1, focused identity PR [#8](https://github.com/darrenhull/Jade-CLI/pull/8), rebased onto approved main `b4d0b02` (Workspace PR7).
 
-## Delivered
+## T01 — Native Workspace execution
 
-- Native signature-free Workspace execution through terminal and JSONL, using private Working databases and Jade's compiler/runtime.
-- Exact snapshot diagnostics, bounded output, cancellation, timeout and recovery; Source publication remains separate.
-- Schema-only/resource input preparation, one-pass visible schema scope, complete scoped inventories and unchanged-input reuse.
-- Native class removal under complete schema declarations; partial/missing managed headers fail closed.
-- Declared imported schema names remain in managed-history validation even after their header and every local class/resource file are removed. Missing previously managed imports fail closed before native rejoin.
-- Durable managed identities survive failed native preparation and same-path class/schema replacement, independently of reusable build claims.
-- Version-specific consumer release notes describe the actual new scratch execution feature; development/review details stay here and in PR documentation.
+PR7 merged into protected main. Final feature head `f0dc9b8` passed hosted run42320075398, unit regressions and the actual native scoped preparation/deletion/history proof. All seven review findings were addressed. Automatic main release run42324831724 succeeded. Official v0.4.0 was published from b4d0b02; downloaded ZIP/EXE checksums, all seven manifest runtime files, tag/main ancestry and the version-matched portable no-Node smoke were independently verified.
 
-## Verification
+Workspace execution uses Jade's native compiler/runtime against private Working databases. Scope includes schema-only/resource inputs, declared imports and durable managed history. Missing managed headers fail closed even when every imported schema file has disappeared. Complete local class removal and unrelated-schema preservation are covered by connected tests.
 
-- Full local default regression: 60 executable tests completed, including four explicitly skipped licensed-runtime tests, before the final review additions. Later additions passed focused inventory, projection and WorkingEngine suites.
-- Actual Jade private-seed proof passed: zero-CLS schema creation, supplied section input/native load, unchanged reuse, class creation/deletion, native6023 after deletion, partial/missing-header rejection and unrelated schema preservation.
-- Extended native proof passed: missing imported header rejection, owned native rejoin timeout, removal of all local schema inputs, a fresh engine rejecting stale execution from durable history, and unrelated schema output73 afterward.
-- Final connected fixture removed after disconnect; no owned native processes remain. Earlier blocked-cleanup fixtures are retained untouched.
-- Portable native executable smoke, configuration, packaging, publisher contracts and actionlint passed. Publisher tests cover explicit feature notes, missing-note rejection, immutable published releases and draft resume.
-- Final required hosted checks are linked on PR7; implementation head116279e started [run42313020516](https://github.com/darrenhull/Jade-CLI/actions/runs/42313020516). The latest PR head, including this checkpoint, must be green before readiness.
-- A seventh Codex finding (all files of an imported schema removed) was reproduced with a failing scope/inventory regression. The minimal import-name retention fix passes unit tests and the extended actual native preparation/deletion/history proof. The native fixture was disconnected and removed. Hosted checks for the new head remain required.
-
-## Pending
-
-- Final-head hosted checks, readiness and owner approval; the coordinator owns Ready/review/merge actions.
-- Automatic protected-main CLI0.4 release and verification of the published archive/checksums.
-- Consumer pin updates and final extension integration/release use the official release, not an unreviewed local candidate.
-
-## Limits
-
-Workspace mode is void with independent locals and fixed RootSchemaApp context. Committed Working data can persist. There is no automatic rollback, GUI hosting, interactive input, custom application context or Workspace debugger. Native console encoding can lose unsupported characters; source positions remain Unicode. Resource handoff does not override Jade's documented locale-loading behavior. The 30,000-class projection benchmark is in memory, not a disk/native compilation benchmark.
-
-## Relocation handoff
-
-The coordinator will move repositories/workspaces out of OneDrive to `C:\Git` only after every agent has stopped. Do not move files from this branch while another agent or owned native process is active.
-
-Preserve Git worktree metadata and repair/verify worktree paths after relocation. Update absolute workspace/configuration references before running. Working identities depend on source-root paths: retain prior private Working databases/caches and data; do not delete them or overwrite Source during relocation. The installed Jade runtime/database is outside these repository moves.
-
-CLI worktrees are the main `Jade-CLI` checkout on `codex/agent/structural-diagnostics`, plus earlier init and structural-hotfix worktrees under `development`. Those earlier branches were merged; verify their own clean state before cleanup. The F5 extension worktree is owned by the UI agent after handoff, not by this CLI task. Two blocked-cleanup TEMP fixtures must remain untouched; the coordinator has their exact paths.
-
-## Read-only data-tools audit
-
-Read-only source audit completed without opening or mutating a database. No writable inspection route was found.
-
-- `RuntimeOperations.cpp` forces readOnly for both Source and Working inspection targets; session reuse is bound to the selected target/configuration.
-- `native-src/inspector/runtime.hpp` independently signs on to RootSchema/RootSchemaApp with shared mode0 and fixed database usage1 (Jade DB_READ_ONLY). JSON configuration cannot change it; production entry calls Runtime(config) without the writable fixture flag.
-- `InspectorSession.cpp` overwrites request command/id. Native dispatch accepts only catalogue, instances, object, collection, cursor release and close. No caller-selected method, script, query language or shell execution is exposed through inspection arguments.
-- OIDs require44 hexadecimal characters and native object/kind checks. Cursor tokens are opaque map keys bound to their source/query mode. Broker session IDs are prefixed with client ownership.
-- Stored properties are read through native property access; mapped properties are skipped. Iterators/licence objects are transient native resources. Application-defined allowedToInspect and configured development-security authorization hooks remain intact.
-- The enforced boundary is read-only persistent database access, not an OS sandbox or a claim that trusted authorization callbacks never run. Runtime initialization/logging and external effects of trusted native/authentication components are outside that narrower guarantee. No Source mutation test was performed.
-
-The inspector source matches its original committed helper source; the committed helper SHA256 is `95f8e26d3fbd749fa199ea5ee01bf3ed6dfc04f01a2831b025b3065933d21642`. MCP schema/argument negative tests and guidance are owned by the MCP repository. Native authority: [Jade Object Manager, opening a process](https://secure.jadeworld.com/developer-centre/JADE2018/OnlineDocumentation/content/resources/objectmanager/ch3jadeapi/opening_a_process.htm).
-
----
-
-# CLI native identity checkpoint
+Workspace limits remain: void execution with independent locals, fixed RootSchemaApp context, bounded output, and committed Working data that can persist. There is no automatic rollback, GUI hosting, interactive input, custom application context or Workspace debugger. Native console encoding may lose unsupported output characters; source positions remain Unicode. Resource handoff does not override Jade's documented locale-loading behavior.
 
 ## T03 — Native Jade object identities
 
-- Implemented a shared native identity boundary: fixed RootSchemaApp `getObjectStringForObject` output and fixed primitive `String.asObject` input. Public identity fields no longer expose packed SDK bytes; legacy hexadecimal input remains accepted for compatibility.
-- Added `oidFormat: jade-native` capability to the native distribution manifest, doctor, helper packets and inspection response bodies. Consumers must support this capability before updating their official CLI pin.
-- Actual TDD: known persistent identity `9002.1` failed against the previous object-valued display; the corrected implementation passes. The doctor capability regression likewise failed before implementation and now passes.
-- Connected SDK proof passes native persistent, transient, shared-transient and 3/5-part subobject roundtrips, malformed input rejection, catalog/object/reference/collection/query identity surfaces and unchanged primitive strings. Native sign-on usage is DB_READ_ONLY (1). These tests use an explicit private integration seed; no developer Source writes.
-- Candidate package version 0.3.2 is provisional. If reviewed main releases 0.4 first, this focused change must rebase and become 0.4.1. No release has been claimed.
-- Actual Source/Working service proof passed: native catalog/object identity roundtrips and native malformed-input failures on both targets; all owned native sessions stopped and the disposable Working fixture removed. Portable package smoke passed outside the checkout without Node on PATH.
-- Complete default C++ suite passed (51 grouped executables, connected proofs skipped unless explicitly enabled). Distribution validation, package tests and portable no-Node smoke also passed.
-- Draft PR8 head e94858f is published for validation. Pending: latest hosted CI/review, protected-main release and official consumer pin/package verification. Extension and MCP agents have a candidate copy for parallel integration.
+- One shared codec returns fixed RootSchemaApp `getObjectStringForObject` output unchanged and parses with fixed primitive `String.asObject`. Existing public identity fields use native values; packed hexadecimal input remains input-only compatibility.
+- `oidFormat: jade-native` appears in the distribution manifest, doctor capabilities, helper ready packets and inspection response bodies. Native existence/kind checks and authorization remain authoritative.
+- Actual native display and doctor-capability tests were RED before implementation and GREEN afterward. Native persistent, transient, shared-transient and 3/5-part subobject roundtrips, malformed input rejection, shared inspector output paths and unchanged primitive strings pass.
+- Actual private Source/Working service lookups and a post-preparation SDK repeat pass. Explicit caller readOnly=false still yields native DB_READ_ONLY usage1. Inspector targets remain read-only; compile/test/Workspace execution retain their separate private Working write semantics.
+- The pre-rebase 51-executable default suite, package validation and portable no-Node smoke passed. Pre-rebase head151352f passed hosted run42319233768. Rebased 0.4.1 passed all64 default executable tests, connected SDK and Source/Working service proofs, workflow/publisher contracts, package/manifest checks and portable no-Node smoke. Latest-head hosted CI and review remain required.
+- Real MCP verification passed39 calls/92 native canonical identities across both targets, including native-property-derived nonempty collections, references, native ID errors/recovery and scoped cursor binding. Extension verification is tracked by its owning agent; final consumers must pin an official verified release.
 
-### Integration fixture correction
+### Fixture isolation correction
 
-Consumer copies initially retained absolute writable INI paths into the old private seed. A repeated check correctly failed with native3014; that private seed is preserved and no production Source was touched. It invalidates those initial consumer isolation claims. Three fresh independent fixtures were provisioned through native verified backup and restore, with all mutable INI directories preflighted under their respective owned roots. Copying or renaming a native seed/INI is prohibited in this proof. The SDK proof passes again on the fresh CLI fixture, with explicit caller readOnly=false still yielding native DB_READ_ONLY usage1. Consumer revalidation is pending against their separate native-provisioned fixtures.
+An early consumer copy retained the original private INI journal paths. A repeated test exposed native3014; the old private fixture is preserved, and those initial consumer isolation claims were invalidated. Production Source was untouched. Three replacements were generated through native verified backup and restore, with every mutable INI directory validated under its own root before sign-on. Consumers received separate fixtures and were instructed not to copy or rename their database/INI. Fresh native SDK, Source/Working and MCP checks passed afterward. The fixture preflight rejects external, relative and default journal/transient directories and handles LF/CRLF.
 
-## T01 — Separate Workspace execution feature
+## Read-only data-tools boundary
 
-CLI PR7 head cc394ac has green hosted validation run42316105067. Readiness, owner approval and protected-main release are coordinated separately. This focused identity branch does not contain Workspace execution changes and does not block their approval.
+`RuntimeOperations` forces readOnly for Source and Working inspection. The native inspector independently signs on to RootSchema/RootSchemaApp with fixed database usage1 (DB_READ_ONLY); caller configuration cannot enable writes. Sessions are bound to their selected target/configuration. Inspection dispatch is fixed to catalog, instances, object, collection, cursor release and close; caller command/id fields are overwritten.
 
-## T13 — Relocation checkpoint
+Native IDs are bounded to512 UTF-8 bytes without ASCII controls, then parsed by Jade (or decoded as legacy compatibility input) and checked natively. Stored properties use native property access; mapped properties are skipped. Application-defined allowedToInspect and configured development-security authorization hooks remain intact. Iterators and licence objects are transient resources. Cursor/session tokens are opaque and scoped, not globally unique object identities.
 
-Do not move active worktrees. The coordinating agent will move repositories/workspaces to C:\Git only after all agents report their owned processes stopped. Preserve user source, Source databases, private Working state and any previously blocked-cleanup fixtures. This checkpoint is development status, separate from consumer release notes.
+The boundary is read-only persistent data access, not an OS sandbox or a promise that trusted native/authentication callbacks have no external effects. No production Source mutation test was performed. Native authority: [Jade Object Manager process opening](https://secure.jadeworld.com/developer-centre/JADE2018/OnlineDocumentation/content/resources/objectmanager/ch3jadeapi/opening_a_process.htm).
+
+## Pending release gates
+
+- Complete rebased 0.4.1 regression/CI/review gates, protected approval and official release.
+- Verify official archive manifests/helper hashes and consumer pin/package integration. Local candidates are not published releases.
+
+The coordinator owns Ready, owner review, approval, merge and release ordering. WIP remains Draft.
+
+## T13 — Relocation
+
+Relocation is paused during PR handoffs. Only the coordinator moves repositories/workspaces to C:\Git, after every agent reports owned processes stopped. Preserve user source, Source databases, private Working state and blocked-cleanup fixtures. Repair Git worktree metadata and absolute configuration paths after relocation. Workspace-root path changes affect Working identities; retain prior state rather than deleting it or overwriting Source. This is development status, separate from consumer release notes.
