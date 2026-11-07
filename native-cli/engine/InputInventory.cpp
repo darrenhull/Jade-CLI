@@ -1,6 +1,67 @@
 #include "InputInventory.hpp"
 #include <algorithm>
 namespace jade::native {
+json InputInventory::remember(const json &previous, const json &current) {
+    auto result = previous;
+    for (const auto &[key, value] : current.items()) {
+        if (const auto old = result.find(key); old != result.end()) {
+            const auto kind = old->value("kind", ""), schema = old->value("schema", "");
+            const auto owner = old->value("owner", "");
+            const bool classChanged = kind == "class" && (value.value("kind", "") != kind ||
+                                                          value.value("schema", "") != schema ||
+                                                          value.value("owner", "") != owner);
+            const bool headerChanged =
+                old->contains("parent") &&
+                (!value.contains("parent") || value.value("schema", "") != schema);
+            if (classChanged || headerChanged)
+                result["managed:" + json::array({kind, schema, owner}).dump()] = *old;
+        }
+        result[key] = value;
+    }
+    return result;
+}
+void InputInventory::requireRemovalHeaders(const json &current, const json &previous,
+                                           const std::set<std::string> &headerSchemas) {
+    std::set<std::pair<std::string, std::string>> classes;
+    std::set<std::string> declaredHeaders;
+    for (const auto &[key, entry] : current.items()) {
+        if (entry.value("kind", "") == "class")
+            classes.emplace(entry.value("schema", ""), entry.value("owner", ""));
+        if (entry.value("kind", "") == "resource" && entry.contains("parent"))
+            declaredHeaders.insert(entry.value("schema", ""));
+    }
+    for (const auto &[key, entry] : previous.items()) {
+        const auto schema = entry.value("schema", ""), owner = entry.value("owner", "");
+        if (entry.value("kind", "") == "resource" && entry.contains("parent") &&
+            !declaredHeaders.contains(schema))
+            throw std::runtime_error("A managed schema header was removed: " + schema +
+                                     ". Restore the schema header before executing scratch code; "
+                                     "Working types were not updated.");
+        if (entry.value("kind", "") == "class" && !classes.contains({schema, owner}) &&
+            !headerSchemas.contains(schema))
+            throw std::runtime_error(
+                "Cannot remove local class " + schema + "::" + owner +
+                " without a complete schema header. Supply completeDefinition before "
+                "executing scratch code; Working types were not updated.");
+    }
+}
+json InputInventory::withinSchemas(const json &inventory, const std::set<std::string> &schemas) {
+    auto result = json::object();
+    for (const auto &[key, value] : inventory.items())
+        if (schemas.contains(value.value("schema", "")))
+            result[key] = value;
+    return result;
+}
+json InputInventory::replaceSchemas(const json &previous, const json &current,
+                                    const std::set<std::string> &schemas) {
+    auto result = json::object();
+    for (const auto &[key, value] : previous.items())
+        if (!schemas.contains(value.value("schema", "")))
+            result[key] = value;
+    for (const auto &[key, value] : current.items())
+        result[key] = value;
+    return result;
+}
 InputPlan InputInventory::compare(const json &current, const json &previous, bool completeProject) {
     InputPlan plan;
     std::set<std::string> currentSchemas;

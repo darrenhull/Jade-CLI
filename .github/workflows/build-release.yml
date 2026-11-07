@@ -106,6 +106,8 @@ jobs:
             "$tag is already published and remains unchanged. Bump the native version for a new release." >> $env:GITHUB_STEP_SUMMARY
             return
           }
+          $notesFile = Join-Path (Get-Location).Path ('.github/release-notes/' + $manifest.packageVersion + '.md')
+          if (!(Test-Path -LiteralPath $notesFile -PathType Leaf) -or [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText($notesFile))) { throw 'Version-specific consumer release notes are required.' }
           $tagCommit = git rev-parse --verify --quiet "refs/tags/$tag^{commit}"
           if ($LASTEXITCODE -eq 0 -and ([string]$tagCommit).Trim() -ne $env:GITHUB_SHA) { throw 'Existing tag points to a different commit.' }
           if ($LASTEXITCODE -notin @(0,1)) { throw 'Could not verify the native release tag.' }
@@ -114,12 +116,12 @@ jobs:
             if ($existing.targetCommitish -ne $env:GITHUB_SHA) { throw 'An existing draft belongs to another commit.' }
             gh release upload "$tag" @assets --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Could not resume the matching unpublished draft.' }
-            gh release edit "$tag" --draft=false --target "$env:GITHUB_SHA"
+            gh release edit "$tag" --draft=false --target "$env:GITHUB_SHA" --notes-file "$notesFile"
             if ($LASTEXITCODE -ne 0) { throw 'Could not publish the matching native draft.' }
           } else {
-            gh release create "$tag" @assets --draft --target "$env:GITHUB_SHA" --title "Jade CLI $tag" --generate-notes --notes "Download jade-cli-win-x64.zip and keep native helpers with jade-cli.exe. Native C++, no Node/Python runtime. Connected operations require an installed compatible licensed Jade runtime."
+            gh release create "$tag" @assets --draft --target "$env:GITHUB_SHA" --title "Jade CLI $tag" --notes-file "$notesFile"
             if ($LASTEXITCODE -ne 0) { throw 'Could not create the native release.' }
-            gh release edit "$tag" --draft=false --target "$env:GITHUB_SHA"
+            gh release edit "$tag" --draft=false --target "$env:GITHUB_SHA" --notes-file "$notesFile"
             if ($LASTEXITCODE -ne 0) { throw 'Could not publish the uploaded native release.' }
           }
           "Published $tag from approved commit $env:GITHUB_SHA." >> $env:GITHUB_STEP_SUMMARY

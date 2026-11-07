@@ -7,6 +7,12 @@ struct InputPlan {
 };
 class InputInventory {
   public:
+    static json remember(const json &previous, const json &current);
+    static void requireRemovalHeaders(const json &current, const json &previous,
+                                      const std::set<std::string> &headerSchemas);
     static InputPlan compare(const json &current, const json &previous, bool completeProject);
+    static json withinSchemas(const json &inventory, const std::set<std::string> &schemas);
+    static json replaceSchemas(const json &previous, const json &current,
+                               const std::set<std::string> &schemas);
 };
 } // namespace jade::native

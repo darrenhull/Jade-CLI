@@ -29,12 +29,14 @@ class ProjectModel {
   public:
     std::vector<ProjectSchema> schemas;
     std::vector<SourceEntry> loose, migrations;
+    std::set<std::string> scopeSchemas;
     std::filesystem::path stageDirectory;
     static std::vector<std::filesystem::path> listFiles(const std::filesystem::path &root);
     static ProjectModel scan(const std::vector<std::filesystem::path> &roots,
                              const std::vector<std::filesystem::path> &explicitFiles = {});
     ProjectModel dependencies(const std::filesystem::path &program) const;
     ProjectModel select(const std::vector<std::filesystem::path> &files) const;
+    ProjectModel schemaScope(const std::string &schema) const;
     json inventory() const;
     void stage(const std::filesystem::path &destination);
 };

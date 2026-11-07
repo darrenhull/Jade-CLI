@@ -7,6 +7,8 @@ class WorkingEngine {
     json prepare(const json &config, NativeProcess::Output output, std::atomic_bool *cancelled);
     json load(const json &working, const std::vector<std::wstring> &args,
               NativeProcess::Output output, std::atomic_bool *cancelled);
+    json executeImpl(const json &request, ProjectModel *project, bool completeScope,
+                     NativeProcess::Output output, std::atomic_bool *cancelled);
 
   public:
     using Output = NativeProcess::Output;
@@ -20,6 +22,8 @@ class WorkingEngine {
     }
     static std::string isolatedIni(const std::string &text, const std::filesystem::path &root);
     json execute(const json &request, Output output = {}, std::atomic_bool *cancelled = nullptr);
+    json executeProject(const json &request, ProjectModel project, bool completeScope,
+                        Output output = {}, std::atomic_bool *cancelled = nullptr);
     void disconnect() {
         session_.disconnect();
     }

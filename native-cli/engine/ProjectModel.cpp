@@ -1,5 +1,6 @@
 #include "ProjectModel.hpp"
 #include "DdxMerger.hpp"
+#include "NativeMigrations.hpp"
 #include <fstream>
 #include <regex>
 #include <algorithm>
@@ -156,6 +157,13 @@ static SourceEntry entry(const std::filesystem::path &file) {
                      signatures.dump());
     return e;
 }
+static std::set<std::string> importedSchemaNames(const ProjectSchema &schema) {
+    std::set<std::string> names;
+    for (const auto &resource : schema.resources)
+        if (resource.file.filename() == L"importedPackageDefinitions.sec")
+            names.insert(resource.model.identifiers.begin(), resource.model.identifiers.end());
+    return names;
+}
 ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots,
                                 const std::vector<std::filesystem::path> &explicitFiles) {
     ProjectModel p;
@@ -191,6 +199,7 @@ ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots,
             names[s.name] = p.schemas.size();
             p.schemas.push_back(s);
         }
+    std::map<std::string, std::set<std::string>> classNames;
     for (auto &e : entries) {
         if (e.extension == ".jcf") {
             p.migrations.push_back(e);
@@ -219,10 +228,9 @@ ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots,
                 continue;
             }
             auto name = e.model.classes[0].name;
-            for (auto &c : s.classes)
-                if (!c.model.classes.empty() && c.model.classes[0].name == name)
-                    throw std::runtime_error("Multiple complete class declarations: " + schema +
-                                             "::" + name);
+            if (!classNames[s.name].insert(name).second)
+                throw std::runtime_error("Multiple complete class declarations: " + schema +
+                                         "::" + name);
             s.classes.push_back(e);
         } else
             s.resources.push_back(e);
@@ -240,14 +248,9 @@ ProjectModel ProjectModel::scan(const std::vector<std::filesystem::path> &roots,
         }
         if (names.contains(s.parent))
             add(names.at(s.parent), false);
-        std::set<std::string> imports;
-        for (auto &resource : s.resources)
-            if (resource.file.filename() == L"importedPackageDefinitions.sec")
-                imports.insert(resource.model.identifiers.begin(),
-                               resource.model.identifiers.end());
-        for (auto &[candidate, position] : names)
-            if (candidate != s.name && imports.contains(candidate))
-                add(position, true);
+        for (const auto &candidate : importedSchemaNames(s))
+            if (candidate != s.name && names.contains(candidate))
+                add(names.at(candidate), true);
         active.erase(s.name);
         done.insert(s.name);
         ordered.push_back(s);
@@ -386,6 +389,58 @@ ProjectModel ProjectModel::select(const std::vector<std::filesystem::path> &file
                   [&](auto &entry) { return !wanted.contains(pathKey(entry.file)); });
     return selected;
 }
+ProjectModel ProjectModel::schemaScope(const std::string &schema) const {
+    ProjectModel scoped;
+    std::map<std::string, const ProjectSchema *> byName;
+    std::map<std::string, std::string> looseParents;
+    for (const auto &entry : schemas)
+        byName[entry.name] = &entry;
+    for (const auto &entry : loose)
+        looseParents[entry.model.schema] = entry.model.parentSchema;
+    std::vector<std::string> pending{schema};
+    for (size_t i = 0; i < pending.size(); ++i) {
+        const auto name = pending[i];
+        if (name.empty() || !scoped.scopeSchemas.insert(name).second)
+            continue;
+        if (const auto found = byName.find(name); found != byName.end()) {
+            pending.push_back(found->second->parent);
+            for (const auto &imported : importedSchemaNames(*found->second))
+                // A previously managed import still belongs to validation
+                // scope after its header and every local class are deleted.
+                pending.push_back(imported);
+        } else if (looseParents.contains(name))
+            pending.push_back(looseParents.at(name));
+    }
+    for (const auto &entry : schemas)
+        if (scoped.scopeSchemas.contains(entry.name))
+            scoped.schemas.push_back(entry);
+    for (const auto &entry : loose)
+        if (scoped.scopeSchemas.contains(entry.model.schema))
+            scoped.loose.push_back(entry);
+    for (const auto &migration : migrations) {
+        const auto operations =
+            NativeMigrations::parse(migration.text, utf8(migration.file.wstring()));
+        bool inside = false, outside = false;
+        std::set<std::string> owners;
+        for (const auto &operation : operations) {
+            owners.insert(operation.schema);
+            if (scoped.scopeSchemas.contains(operation.schema))
+                inside = true;
+            else
+                outside = true;
+        }
+        if (inside && outside)
+            throw std::runtime_error("A tracked JCF migration crosses the selected schema scope: " +
+                                     utf8(migration.file.wstring()) +
+                                     ". Build the complete project before running this Workspace.");
+        if (inside) {
+            auto selected = migration;
+            selected.model.schema = *owners.begin();
+            scoped.migrations.push_back(std::move(selected));
+        }
+    }
+    return scoped;
+}
 json ProjectModel::inventory() const {
     if (!schemas.empty() && !loose.empty())
         throw std::runtime_error(
@@ -414,8 +469,11 @@ json ProjectModel::inventory() const {
             {"kind", "class"},
             {"schema", e.model.schema},
             {"owner", e.model.classes.empty() ? "" : e.model.classes[0].name}};
-    for (auto &e : migrations)
+    for (auto &e : migrations) {
         values[pathKey(e.file)] = {{"hash", e.hash}, {"kind", "migration"}};
+        if (!e.model.schema.empty())
+            values[pathKey(e.file)]["schema"] = e.model.schema;
+    }
     return values;
 }
 void ProjectModel::stage(const std::filesystem::path &destination) {

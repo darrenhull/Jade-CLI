@@ -254,8 +254,9 @@ std::string NativeProcess::line(std::atomic_bool *cancelled, unsigned timeout,
 ProcessResult NativeProcess::run(const std::filesystem::path &exe,
                                  const std::vector<std::wstring> &args,
                                  const std::filesystem::path &cwd, std::atomic_bool *cancelled,
-                                 unsigned timeout, const Output &output) {
+                                 unsigned timeout, const Output &output, bool closeInput) {
     start(exe, args, cwd);
+    if (closeInput) endInput();
     ProcessResult result;
     auto beginning = std::chrono::steady_clock::now();
     auto sink = [&](const std::string &s) {

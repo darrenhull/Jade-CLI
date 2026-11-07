@@ -1,4 +1,4 @@
 #pragma once
 namespace jade::native {
-inline constexpr char cliVersion[] = "0.3.1";
+inline constexpr char cliVersion[] = "0.4.0";
 }

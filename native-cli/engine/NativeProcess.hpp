@@ -43,7 +43,7 @@ class NativeProcess {
     std::string line(std::atomic_bool *cancelled, unsigned timeout, const Output &output);
     ProcessResult run(const std::filesystem::path &exe, const std::vector<std::wstring> &args,
                       const std::filesystem::path &cwd, std::atomic_bool *cancelled,
-                      unsigned timeout, const Output &output);
+                      unsigned timeout, const Output &output, bool closeInput = false);
 };
 std::string utf8(const std::wstring &value);
 std::wstring wide(const std::string &value);

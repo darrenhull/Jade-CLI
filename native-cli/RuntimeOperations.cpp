@@ -2,6 +2,7 @@
 #include "SourceCatalog.hpp"
 #include "Version.hpp"
 #include "ProjectConfiguration.hpp"
+#include "engine/WorkspaceRunner.hpp"
 #include <fstream>
 #include <set>
 namespace jade::native {
@@ -84,6 +85,18 @@ nlohmann::json RuntimeOperations::runPrepared(const PreparedCommand &prepared,
             request[key] = prepared.values[key];
     if (prepared.values.contains("args"))
         request["args"] = nlohmann::json::parse(prepared.values["args"].get<std::string>());
+    if (prepared.command == "workspace.run") {
+        if (!prepared.files.empty()) {
+            if (request.contains("sourceText"))
+                throw std::runtime_error("Use a Workspace file or sourceText snapshot, not both.");
+            const auto &file = prepared.files[0];
+            if (!fs::is_regular_file(file) || fs::file_size(file) > 131074)
+                throw std::runtime_error("Workspace file is missing or exceeds the source limit.");
+            request["sourceText"] = readText(file);
+            request["source"] = pathText(file);
+        }
+        return execute(request, output, cancelled);
+    }
     if (prepared.command != "build" && prepared.command != "test")
         return execute(request, output, cancelled);
     auto selected = prepared.files;
@@ -142,6 +155,7 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
     if (command != "cli" && command != "prepare" && command != "disconnect" &&
         command != "inspect.close") {
         const bool connectionRequired = command == "build" || command == "test" ||
+                                        command == "workspace.run" ||
                                         command.starts_with("working.") ||
                                         command.starts_with("inspect.") || command == "native.run";
         config = ProjectConfiguration().resolve(
@@ -198,6 +212,7 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
                   {"sourceSearch", true},
                   {"inspection", true},
                   {"nativeUtility", true},
+                  {"workspace", true},
                   {"debug", false},
                   {"publishPlan", false}}}};
     }
@@ -215,6 +230,10 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
     if (command == "build" || command == "test") {
         releaseInspections();
         return working_.execute(request, output, cancelled);
+    }
+    if (command == "workspace.run") {
+        releaseInspections();
+        return WorkspaceRunner(working_).execute(request, output, cancelled);
     }
     if (command == "native.run") {
         const auto install = fs::u8path(config.value("installPath", "")),

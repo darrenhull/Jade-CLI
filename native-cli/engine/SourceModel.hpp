@@ -14,6 +14,7 @@ struct MethodDeclaration {
 class SourceModel {
   public:
     std::string schema, parentSchema, text, code, source;
+    bool completeSchema = false;
     std::vector<ClassDeclaration> classes;
     std::vector<MethodDeclaration> methods;
     std::vector<std::string> identifiers;
