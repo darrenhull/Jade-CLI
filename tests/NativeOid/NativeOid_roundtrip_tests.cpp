@@ -4,24 +4,22 @@
 #include "../../native-src/inspector/inspector.cpp"
 #undef wmain
 #include <cassert>
+#include "../../native-cli/engine/tests/fixtures/NativeOidFixture.hpp"
 
 int main() {
     try {
         const auto variable = _wgetenv(L"JADE_OID_TEST_SEED");
         if (!variable)
             throw std::runtime_error("Set JADE_OID_TEST_SEED to an isolated integration seed.");
-        const auto seed = std::filesystem::canonical(variable);
-        if (seed.parent_path() != std::filesystem::canonical(std::filesystem::temp_directory_path()) ||
-            seed.filename().wstring().find(L"jade-cli-integration-seed-") != 0 ||
-            !std::filesystem::exists(seed / L"system/_control.dat"))
-            throw std::runtime_error("A disposable native integration seed is required.");
+        const auto seed = jade::tests::NativeOidFixture::seed(variable);
         const auto jadeHome = _wgetenv(L"JADE_HOME");
         if (!jadeHome)
             throw std::runtime_error("Set JADE_HOME to the licensed Jade installation.");
         Runtime runtime({{"installPath", utf8(jadeHome)},
                          {"databasePath", utf8((seed / L"system").wstring())},
                          {"iniPath", utf8((seed / L"working.ini").wstring())},
-                         {"server", "singleUser"}, {"readOnly", false}});
+                         {"server", "singleUser"},
+                         {"readOnly", false}});
         assert(runtime.get(runtime.instances[6], "getSignOnUsage", DSKINTEGER).value.body.integer ==
                1);
         Inspector inspector(runtime);

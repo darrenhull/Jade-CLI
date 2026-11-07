@@ -1,5 +1,7 @@
 #include "RuntimeOperations.hpp"
 #include "../fixtures/DisposableWorkingDirectory.hpp"
+#include "../fixtures/NativeOidFixture.hpp"
+#include "Version.hpp"
 #include <cstdlib>
 #include <iostream>
 
@@ -11,16 +13,18 @@ int main() {
             std::cout << "SKIP: native OID inspection requires an isolated integration seed\n";
             return 0;
         }
-        const auto seed = std::filesystem::canonical(std::filesystem::u8path(seedValue));
-        if (!contains(std::filesystem::temp_directory_path(), seed) ||
-            !seed.filename().wstring().starts_with(L"jade-cli-integration-seed-") ||
-            !std::filesystem::is_regular_file(seed / L"system/_control.dat"))
+        const auto seed = jade::tests::NativeOidFixture::seed(std::filesystem::u8path(seedValue));
+        const auto staged = std::getenv("JADE_CPP_TEST_DISTRIBUTION");
+        if (!staged || !*staged)
             throw std::runtime_error(
-                "Use a disposable TEMP integration seed, never developer Source.");
+                "Set JADE_CPP_TEST_DISTRIBUTION to a verified staged native distribution.");
+        const auto distribution = jade::tests::NativeOidFixture::distribution(
+            std::filesystem::u8path(staged), cliVersion,
+            [](const std::string &data) { return sha256(data); });
         DisposableWorkingDirectory fixture("jade-native-oid-inspection-");
         const auto root = fixture.path();
         std::filesystem::create_directories(root / L"src");
-        RuntimeOperations runtime(std::filesystem::current_path(), root / L"sessions");
+        RuntimeOperations runtime(distribution, root / L"sessions");
         const json config = {{"installPath", "C:/Jade2025"},
                              {"databasePath", utf8((seed / L"system").wstring())},
                              {"iniPath", utf8((seed / L"working.ini").wstring())},

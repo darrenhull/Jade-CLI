@@ -23,6 +23,10 @@ Workspace limits remain: void execution with independent locals, fixed RootSchem
 
 An early consumer copy retained the original private INI journal paths. A repeated test exposed native3014; the old private fixture is preserved, and those initial consumer isolation claims were invalidated. Production Source was untouched. Three replacements were generated through native verified backup and restore, with every mutable INI directory validated under its own root before sign-on. Consumers received separate fixtures and were instructed not to copy or rename their database/INI. Fresh native SDK, Source/Working and MCP checks passed afterward. The fixture preflight rejects external, relative and default journal/transient directories and handles LF/CRLF.
 
+### Post-review proof-entry safeguards
+
+Both C++ identity proof entry points now run the same canonical owned-directory preflight before any Runtime, backup or sign-on; direct invocation cannot bypass the PowerShell guard. Native-open-free regressions rejected copied INI paths, missing/default/relative/duplicate settings, old/missing staged manifests and tampered helpers. A valid staged manifest passed. The exact documented build-script invocation passed actual Source/Working inspection with cleanup, and direct SDK/CLI child entry tests rejected unsafe paths before native work; direct SDK valid-seed roundtrips also passed. The connected service proof requires an explicit version-matched, checksum-verified JADE_CPP_TEST_DISTRIBUTION and has no checkout or older-helper fallback. Latest-head CI must pass after these review fixes.
+
 ## Read-only data-tools boundary
 
 `RuntimeOperations` forces readOnly for Source and Working inspection. The native inspector independently signs on to RootSchema/RootSchemaApp with fixed database usage1 (DB_READ_ONLY); caller configuration cannot enable writes. Sessions are bound to their selected target/configuration. Inspection dispatch is fixed to catalog, instances, object, collection, cursor release and close; caller command/id fields are overwritten.

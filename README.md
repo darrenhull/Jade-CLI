@@ -171,6 +171,15 @@ Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade
 
 The explicit native identity proof is `tests/NativeOid/NativeOid_roundtrip_tests.ps1 -JadeHome <licensed-install> -Seed <private-TEMP-integration-seed>`. It validates native formatting/parsing for persistent, transient, shared-transient and subobject identities, shared inspector output paths and unchanged primitive strings. `JADE_CPP_OID_TEST_SEED` enables the grouped `NativeOid_inspection_native_tests` proof through actual Source and Working inspection sessions against a disposable private seed. Default hosted tests skip connected proofs.
 
+Both C++ proof entry points independently validate the seed's mutable INI directories before opening Jade, including when invoked directly. The service proof also requires a version-matched staged distribution with verified manifest/runtime hashes; it never searches the checkout or falls back to an older helper. Run it from the repository root:
+
+```powershell
+./scripts/build-native-cli.ps1 -SkipTests
+$env:JADE_CPP_TEST_DISTRIBUTION = (Resolve-Path dist/jade-cli-win-x64).Path
+$env:JADE_CPP_OID_TEST_SEED = '<private native-restored TEMP seed root>'
+./scripts/build-native-cli.ps1 -TestsOnly -TestFilter NativeOid_inspection_native_tests
+```
+
 
 ## GitHub builds and releases
 
