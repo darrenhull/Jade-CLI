@@ -30,6 +30,8 @@ std::string DdxMerger::merge(const std::string &schema,
                           nullptr),
           "Create native XML writer");
     check(writer->SetOutput(stream.Get()), "Set XML output");
+    // Jade loads DDX definitions as Windows lines, including package application references.
+    check(writer->SetProperty(XmlWriterProperty_Indent, TRUE), "Separate native DDX definitions");
     check(writer->WriteStartDocument(XmlStandalone_Omit), "Write XML declaration");
     bool opened = false;
     std::map<std::wstring, std::wstring> expected;
@@ -50,8 +52,10 @@ std::string DdxMerger::merge(const std::string &schema,
         check(reader->SetInput(input.Get()), "Set XML input");
         XmlNodeType type;
         bool root = false;
+        bool currentNode = false;
         HRESULT hr;
-        while ((hr = reader->Read(&type)) == S_OK) {
+        while ((hr = currentNode ? reader->GetNodeType(&type) : reader->Read(&type)) == S_OK) {
+            currentNode = false;
             UINT depth = 0;
             reader->GetDepth(&depth);
             const wchar_t *name = nullptr;
@@ -106,6 +110,9 @@ std::string DdxMerger::merge(const std::string &schema,
                 if (!identities.insert(identity).second)
                     throw std::runtime_error("Duplicate DDX definition: " + utf8(identity));
                 check(writer->WriteNode(reader.Get(), TRUE), "Write native DDX definition");
+                // WriteNode already advances to the next sibling. Read its
+                // current position on the next iteration instead of skipping it.
+                currentNode = true;
             }
         }
         check(hr, "Parse native DDX");

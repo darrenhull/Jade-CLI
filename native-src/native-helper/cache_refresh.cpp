@@ -1,4 +1,5 @@
 #include "native_host.hpp"
+#include "cache_lifetime.hpp"
 #include <jomparam.hpp>
 namespace jade {
 namespace {
@@ -58,7 +59,7 @@ struct Reader {
         result["constants"]=json::array();for(const auto& id:members(ptr,"?constants@DskType@@QEBAHAEAVJomColl@@@Z"))result["constants"].push_back(constant(id,oid));
         for(const auto& id:members(ptr,"?methods@DskType@@UEBAHAEAVJomColl@@@Z")){auto row=method(id);row["owner_oid"]=oid;result["methods"].push_back(row);}
         if(class_type){result["superclass_oid"]=reference(ptr,"?getSuperclass@DskClass@@QEBAHAEAV1@@Z","DskClass");for(const auto& id:members(ptr,"?properties@DskClass@@UEBAHAEAVJomColl@@@Z")){auto row=property(id);row["owner_oid"]=oid;result["properties"].push_back(row);}
-            result["abstract"]=bool(scalar(ptr,"?getAbstract@DskSchemaEntity@@UEBAHPEA_N@Z"));for(auto field:{"Final","TransientAllowed","PersistentAllowed","SharedTransientAllowed"}){auto full=std::string("?get")+field+"@DskType@@UEBAHPEA_NI@Z";auto key=std::string(field)=="Final"?"final":std::string(field)=="TransientAllowed"?"transient_allowed":std::string(field)=="PersistentAllowed"?"persistent_allowed":"shared_transient_allowed";result[key]=bool(scalar(ptr,full.c_str()));}}
+            result["abstract"]=bool(scalar(ptr,"?getAbstract@DskSchemaEntity@@UEBAHPEA_N@Z"));capture_type_lifetime(result,[&](const char* entry){return scalar(ptr,entry);});}
         if(category==3||category==210){result["keys"]=json::array();for(const auto& id:members(ptr,"?keys@DskCollClass@@UEBAHAEAVJomColl@@@Z"))result["keys"].push_back(key(id));result["member_type_oid"]=reference(ptr,"?getMemberType@DskCollClass@@UEBAHAEAVDskType@@@Z","DskType");result["member_type_size"]=scalar<uint32_t>(ptr,"?getMemberTypeSize@DskCollClass@@UEBAHPEAI@Z");result["member_type_precision"]=scalar(ptr,"?getMemberTypePrecision@DskCollClass@@UEBAHPEAE@Z");result["member_type_scale"]=scalar(ptr,"?getMemberTypeSFactor@DskCollClass@@UEBAHPEAE@Z");}return result;
     }
 };
@@ -93,7 +94,7 @@ json refresh_system_cache(Context& context){
         std::map<uint32_t,std::string> primitive_ids;for(const auto& type:types)if(type.value("primitive",false))primitive_ids[type["number"]]=type["oid"];
         auto bind_constants=[&](json& constants){for(auto& constant:constants){constant["schema_oid"]=root;if(constant.contains("value_type_number")&&primitive_ids.contains(constant["value_type_number"]))constant["type_oid"]=primitive_ids.at(constant["value_type_number"]);}};
         bind_constants(root_record["constants"]);for(auto& type:types)bind_constants(type["constants"]);
-        if(types.empty())throw std::runtime_error("Metadata refresh produced no system types");capture_internal_properties(module,reinterpret_cast<word>(process.data()),types);json cache={{"formatVersion",1},{"fingerprint",context.fingerprint},{"schema",root_record},{"types",std::move(types)},{"metadataCapabilities",json::array({"collections","internalMetadata","nativeEntrypoints","constants","dictionaryKeys","unicodeValues"})}};cache["checksum"]=hash(cache.dump());
+        if(types.empty())throw std::runtime_error("Metadata refresh produced no system types");capture_internal_properties(module,reinterpret_cast<word>(process.data()),types);json cache={{"formatVersion",1},{"fingerprint",context.fingerprint},{"schema",root_record},{"types",std::move(types)},{"metadataCapabilities",json::array({"collections","internalMetadata","nativeEntrypoints","constants","dictionaryKeys","unicodeValues","subclassLifetime"})}};cache["checksum"]=hash(cache.dump());
         close();write_json(context.cache_path(),cache);return {{"success",true},{"typeCount",cache["types"].size()},{"path",filename(context.cache_path())},{"readOnly",true},{"disconnected",true},{"pythonProcessesStarted",0}};
     }catch(...){auto original=std::current_exception();try{close();}catch(...){}std::rethrow_exception(original);}
 }

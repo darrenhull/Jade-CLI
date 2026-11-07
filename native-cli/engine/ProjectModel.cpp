@@ -476,6 +476,23 @@ json ProjectModel::inventory() const {
     }
     return values;
 }
+static std::string nativeSectionText(const std::string &source) {
+    // JadeJoinSchema reads native SEC resources as Windows text. Canonicalize
+    // only the private staging copy, as already done for headers and classes.
+    std::string result;
+    result.reserve(source.size());
+    for (size_t i = 0; i < source.size(); ++i) {
+        if (source[i] == '\r') {
+            result += "\r\n";
+            if (i + 1 < source.size() && source[i + 1] == '\n')
+                ++i;
+        } else if (source[i] == '\n')
+            result += "\r\n";
+        else
+            result += source[i];
+    }
+    return result;
+}
 void ProjectModel::stage(const std::filesystem::path &destination) {
     stageDirectory = destination;
     std::filesystem::create_directories(destination);
@@ -513,7 +530,7 @@ void ProjectModel::stage(const std::filesystem::path &destination) {
             writeText(s.directory / (name + ".sec"), "");
         for (auto &e : s.resources)
             if (e.extension == ".sec")
-                writeText(s.directory / e.file.filename(), "\xEF\xBB\xBF" + e.text);
+                writeText(s.directory / e.file.filename(), "\xEF\xBB\xBF" + nativeSectionText(e.text));
         {
             std::istringstream input(s.header.text);
             std::string line, normalized;
