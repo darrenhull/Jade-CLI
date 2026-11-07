@@ -52,3 +52,26 @@ Read-only source audit completed without opening or mutating a database. No writ
 - The enforced boundary is read-only persistent database access, not an OS sandbox or a claim that trusted authorization callbacks never run. Runtime initialization/logging and external effects of trusted native/authentication components are outside that narrower guarantee. No Source mutation test was performed.
 
 The inspector source matches its original committed helper source; the committed helper SHA256 is `95f8e26d3fbd749fa199ea5ee01bf3ed6dfc04f01a2831b025b3065933d21642`. MCP schema/argument negative tests and guidance are owned by the MCP repository. Native authority: [Jade Object Manager, opening a process](https://secure.jadeworld.com/developer-centre/JADE2018/OnlineDocumentation/content/resources/objectmanager/ch3jadeapi/opening_a_process.htm).
+
+---
+
+# CLI native identity checkpoint
+
+## T03 — Native Jade object identities
+
+- Implemented a shared native identity boundary: fixed RootSchemaApp `getObjectStringForObject` output and fixed primitive `String.asObject` input. Public identity fields no longer expose packed SDK bytes; legacy hexadecimal input remains accepted for compatibility.
+- Added `oidFormat: jade-native` capability to the native distribution manifest, doctor, helper packets and inspection response bodies. Consumers must support this capability before updating their official CLI pin.
+- Actual TDD: known persistent identity `9002.1` failed against the previous object-valued display; the corrected implementation passes. The doctor capability regression likewise failed before implementation and now passes.
+- Connected SDK proof passes native persistent, transient, shared-transient and 3/5-part subobject roundtrips, malformed input rejection, catalog/object/reference/collection/query identity surfaces and unchanged primitive strings. Native sign-on usage is DB_READ_ONLY (1). These tests use an explicit private integration seed; no developer Source writes.
+- Candidate package version 0.3.2 is provisional. If reviewed main releases 0.4 first, this focused change must rebase and become 0.4.1. No release has been claimed.
+- Actual Source/Working service proof passed: native catalog/object identity roundtrips and native malformed-input failures on both targets; all owned native sessions stopped and the disposable Working fixture removed. Portable package smoke passed outside the checkout without Node on PATH.
+- Complete default C++ suite passed (51 grouped executables, connected proofs skipped unless explicitly enabled). Distribution validation, package tests and portable no-Node smoke also passed.
+- Pending: bot Draft PR/hosted CI/review, protected-main release and official consumer pin/package verification. Extension and MCP agents have a candidate copy for parallel integration.
+
+## T01 — Separate Workspace execution feature
+
+CLI PR7 head cc394ac has green hosted validation run42316105067. Readiness, owner approval and protected-main release are coordinated separately. This focused identity branch does not contain Workspace execution changes and does not block their approval.
+
+## T13 — Relocation checkpoint
+
+Do not move active worktrees. The coordinating agent will move repositories/workspaces to C:\Git only after all agents report their owned processes stopped. Preserve user source, Source databases, private Working state and any previously blocked-cleanup fixtures. This checkpoint is development status, separate from consumer release notes.

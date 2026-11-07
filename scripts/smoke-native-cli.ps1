@@ -22,7 +22,7 @@ typeSources
  $env:JADE_TOOLS_STATE_DIRECTORY=Join-Path $root 'state'
  Set-Location -LiteralPath $root
  $help=& $exe --help;if($LASTEXITCODE -ne 0 -or ($help -join "`n") -notmatch 'native C\+\+'){throw 'Native portable help failed'}
- $doctor=& $exe doctor --json|ConvertFrom-Json;if($LASTEXITCODE -ne 0 -or $doctor.runtimeImplementation -ne 'native-cpp'){throw 'Native portable doctor failed'}
+ $doctor=& $exe doctor --json|ConvertFrom-Json;if($LASTEXITCODE -ne 0 -or $doctor.runtimeImplementation -ne 'native-cpp' -or $doctor.capabilities.oidFormat -ne 'jade-native'){throw 'Native portable doctor failed'}
  $found=& $exe source search --workspace $workspace --query PortablePet --json|ConvertFrom-Json
  if($LASTEXITCODE -ne 0 -or $found.total -ne 1 -or $found.rows[0].schema -ne 'PortableSchema'){throw 'Native portable discovery failed'}
  $status=& $exe status --json|ConvertFrom-Json;if($LASTEXITCODE -ne 0 -or !$status.brokerPID){throw 'Native broker status failed'}

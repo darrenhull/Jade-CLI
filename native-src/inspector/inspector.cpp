@@ -1,4 +1,5 @@
 #include "runtime.hpp"
+#include "NativeOid.hpp"
 #include "protocol.hpp"
 #include "security.hpp"
 #include "CatalogPage.hpp"
@@ -7,11 +8,15 @@ ProtocolOutput protocolOutput;
 void emit(json value)
 {
     value["protocol"] = "jade-inspect/1";
+    value["oidFormat"] = "jade-native";
+    if (value.contains("body") && value["body"].is_object())
+        value["body"]["oidFormat"] = "jade-native";
     protocolOutput.write(value);
 }
 struct Inspector
 {
     Runtime &r;
+    NativeOid oids;
     DevelopmentSecurity security;
     bool production = false;
     int developmentLicences = 0;
@@ -30,7 +35,7 @@ struct Inspector
     };
     std::map<std::string, Cursor> cursors;
     unsigned nextCursor = 0;
-    explicit Inspector(Runtime &runtime) : r(runtime)
+    explicit Inspector(Runtime &runtime) : r(runtime), oids(runtime, [this](Param &p) { return string(p); })
     {
         production = r.get(r.instances[4], "getProductionMode", DSKBOOLEAN).value.body.boolean;
         Oid licence{};
@@ -118,7 +123,7 @@ struct Inspector
             current = c.reference("?getSuperclass@DskClass@@QEBAHAEAV1@@Z", "DskClass");
         }
         auto result =
-            json{{"oid", hex(&oid, 22)},
+            json{{"oid", oids.format(oid)},
                  {"name", cls.name()},
                  {"schema", schemaName(oid)},
                  {"superclass", parentName},
@@ -151,7 +156,7 @@ struct Inspector
                 classes.push_back(classInfo(cls));
             std::sort(classes.begin(), classes.end(),
                       [](const json &a, const json &b) { return a["name"] < b["name"]; });
-            schemas.push_back({{"name", name}, {"oid", hex(&id, 22)}, {"classes", classes}});
+            schemas.push_back({{"name", name}, {"oid", oids.format(id)}, {"classes", classes}});
         }
         std::sort(schemas.begin(), schemas.end(),
                   [](const json &a, const json &b) { return a["name"] < b["name"]; });
@@ -237,9 +242,10 @@ struct Inspector
                 return {{"value", "null"},
                         {"type", declaredType.empty() ? "Object" : declaredType},
                         {"oid", nullptr}};
-            return {{"value", hex(&oid, 22)},
+            const auto native = oids.format(oid);
+            return {{"value", native},
                     {"type", declaredType.empty() ? "Object" : declaredType},
-                    {"oid", hex(&oid, 22)}};
+                    {"oid", native}};
         }
         if (format == DSKNULL || format == DSKUNDEF)
             return {
@@ -345,7 +351,7 @@ struct Inspector
             throw;
         }
         r.destroy(iter);
-        return {{"oid", hex(&oid, 22)},     {"className", info["name"]},
+        return {{"oid", oids.format(oid)},     {"className", info["name"]},
                 {"schema", info["schema"]}, {"collection", info["collection"]},
                 {"properties", properties}, {"readOnly", true}};
     }
@@ -355,10 +361,11 @@ struct Inspector
         authorize(oid, cls);
         Meta type(r, "DskClass", &cls);
         const auto name = type.name();
-        return {{"oid", hex(&oid, 22)},
+        const auto native = oids.format(oid);
+        return {{"oid", native},
                 {"className", name},
                 {"schema", schemaName(cls)},
-                {"label", name + " · " + hex(&oid, 22)}};
+                {"label", name + " · " + native}};
     }
     void release(Cursor &c)
     {
@@ -458,8 +465,8 @@ struct Inspector
         const auto limit = request.value("limit", request.value("pageSize", 50));
         if (limit < 1 || limit > 100)
             throw std::runtime_error("Page limit must be between 1 and 100.");
-        const auto source = request.at(collectionMode ? "oid" : "classOid").get<std::string>();
-        const auto sourceOid = parseOid(source);
+        const auto sourceOid = oids.parse(request.at(collectionMode ? "oid" : "classOid").get<std::string>());
+        const auto source = oids.format(sourceOid);
         bool valid = false;
         if (nullOid(sourceOid))
             throw std::runtime_error("Inspection OID cannot be null.");
@@ -502,7 +509,7 @@ struct Inspector
                 c.classes.push_back(sourceOid);
                 if (request.value("includeSubclasses", false))
                 {
-                    std::set<std::string> seen{source};
+                    std::set<std::string> seen{hex(&sourceOid, 22)};
                     for (size_t i = 0; i < c.classes.size(); i++)
                     {
                         Meta cls(r, "DskClass", &c.classes[i]);
@@ -527,7 +534,7 @@ struct Inspector
             {
                 if (!collectionMode)
                 {
-                    auto bufferedOid = parseOid(cursor.buffered.at("oid"));
+                    auto bufferedOid = oids.parse(cursor.buffered.at("oid"));
                     authorize(bufferedOid, classOf(bufferedOid));
                 }
                 items.push_back(cursor.buffered);
@@ -568,7 +575,7 @@ struct Inspector
         if (command == "catalog")
             return catalogRequest(request);
         if (command == "object")
-            return object(parseOid(request.at("oid")));
+            return object(oids.parse(request.at("oid")));
         if (command == "instances")
             return page(request, false);
         if (command == "collection")

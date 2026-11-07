@@ -1,6 +1,6 @@
 # Jade CLI — native C++
 
-`jade-cli.exe` 0.4.0 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
+`jade-cli.exe` 0.4.1 is a native Windows C++ executable. Command handling, configuration discovery, the shared broker, dependency selection, Working database preparation and build/test orchestration run in C++. There is no embedded Node runtime, JavaScript engine or Python process in the CLI.
 
 Jade's installed native tools and object manager perform compilation and execution. The distribution includes our native helper executables, not Jade vendor DLLs or a database. A compatible licensed Windows Jade installation is required for connected operations. Terminal commands and JSONL service requests use the same native implementation.
 
@@ -147,6 +147,10 @@ SingleUser Source must be available for initial backup. MultiUser Source uses na
 
 Inspection sessions bind target/configuration identity. Close an old session before changing target; object identities and cursors never transfer between Source and Working. Client transport loss cancels its active jobs and closes its owned helper/inspection sessions. Successful idle compile/test state can remain warm in the broker.
 
+Inspection returns Jade's own object identity strings unchanged, using the fixed native `getObjectStringForObject` formatter and `String.asObject` parser. This includes native transient/shared-transient and subobject distinctions; for example, a persistent object can be `9002.1`. Existing `oid` fields, catalog identities and reference-valued properties use this representation. Native identity strings are opaque to clients: do not construct, trim, decode or reinterpret them. Cursor and session tokens remain separate opaque transport identifiers.
+
+Inspection accepts bounded native identity strings (1–512 UTF-8 bytes without ASCII control characters). The old 44-character packed hexadecimal representation remains an input-only compatibility format. Parsing an identity does not establish that an object exists or that access is permitted: the selected database and native inspection authorization still apply. `distribution.json.oidFormat`, `doctor.capabilities.oidFormat`, helper ready packets and inspection response bodies advertise `jade-native`; adapters must check this capability before accepting the new identities. Both Source and Working data inspection use native read-only sessions. Compilation, tests and Workspace execution retain their separate private Working write semantics.
+
 Native gateways `native.run` and `helper inspect|debug|compiler [session.json]` preserve Jade's native protocols. Utilities are restricted to `jadclient`, `jadloadb`, `jdbutilb` and `jdbadmin` in the configured installation. These are trusted local interfaces; callers remain responsible for authorizing Source writes. The helper gateway forwards native stdio under a broker lease. Version-pinned debugger ABI checks remain active. Arbitrary expressions, GUI hosting and unrestricted attach are not added.
 
 Protocol clients launch `jade-cli.exe service --stdio`. `{ "command": "cli", "operation": "build", "argv": [], "cwd": "C:/repos/example" }` uses the same configuration discovery and command handling as the terminal. `prepare` returns resolved configuration metadata without connecting to a database.
@@ -164,6 +168,8 @@ The script compiles the native library, runs grouped C++ tests, and builds `dist
 Tests cover configuration and positional arguments, schema-qualified discovery, process quoting/cancellation, source staging, diagnostics, warm sessions, broker startup races, authentication, client ownership, helper leases and recovery. The [test coverage matrix](native-cli/tests/README.md) identifies each test group and its limits. Default tests do not open a developer database. The explicit `JADE_CPP_TEST_SEED` connected proof accepts a private disposable TEMP database and validates actual Jade compilation and test execution. Hosted CI does not claim connected coverage without the licensed runtime.
 
 Rebuilding Jade helper executables also requires the installed Jade SDK. No Jade vendor DLLs, databases, credentials or generated evidence belong in Git. The previous Node implementation is preserved on the `codex/agent/ci-releases` branch (with a local `codex/node-cli-baseline` checkpoint) for comparison; it is not included in the native distribution.
+
+The explicit native identity proof is `tests/NativeOid/NativeOid_roundtrip_tests.ps1 -JadeHome <licensed-install> -Seed <private-TEMP-integration-seed>`. It validates native formatting/parsing for persistent, transient, shared-transient and subobject identities, shared inspector output paths and unchanged primitive strings. `JADE_CPP_OID_TEST_SEED` enables the grouped `NativeOid_inspection_native_tests` proof through actual Source and Working inspection sessions against a disposable private seed. Default hosted tests skip connected proofs.
 
 
 ## GitHub builds and releases
