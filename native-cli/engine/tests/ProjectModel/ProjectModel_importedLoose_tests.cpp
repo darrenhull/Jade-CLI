@@ -1,4 +1,5 @@
 #include "ProjectModel.hpp"
+#include "InputInventory.hpp"
 #include <cassert>
 #include <iostream>
 using namespace jade::native;
@@ -29,5 +30,14 @@ int main() {
             std::string(error.what()).find("Missing schema header for B") != std::string::npos;
     }
     assert(rejected);
+    // Even removal of every B file must retain the declared import in the
+    // validation scope: a previous native B header can still exist in Working.
+    project.loose.clear();
+    const auto absent = project.schemaScope("A");
+    assert(absent.scopeSchemas.contains("B"));
+    const json managed = {{"B.scm", {{"schema", "B"}, {"parent", "RootSchema"}}}};
+    const auto plan = InputInventory::compare(
+        json::object(), InputInventory::withinSchemas(managed, absent.scopeSchemas), true);
+    assert(plan.removedSchemas == std::vector<std::string>{"B"});
     std::cout << "Locally imported classes cannot bypass their missing schema header\n";
 }

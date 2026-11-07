@@ -405,8 +405,9 @@ ProjectModel ProjectModel::schemaScope(const std::string &schema) const {
         if (const auto found = byName.find(name); found != byName.end()) {
             pending.push_back(found->second->parent);
             for (const auto &imported : importedSchemaNames(*found->second))
-                if (byName.contains(imported) || looseParents.contains(imported))
-                    pending.push_back(imported);
+                // A previously managed import still belongs to validation
+                // scope after its header and every local class are deleted.
+                pending.push_back(imported);
         } else if (looseParents.contains(name))
             pending.push_back(looseParents.at(name));
     }

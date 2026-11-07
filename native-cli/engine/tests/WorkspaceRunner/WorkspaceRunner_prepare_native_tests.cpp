@@ -191,6 +191,20 @@ int main() try {
                     .find("Missing schema header for " + b) == std::string::npos)
             throw std::runtime_error("Imported local classes bypassed their missing header: " +
                                      missingImported.dump());
+        std::map<std::filesystem::path, std::string> importedFiles;
+        for (const auto &entry : std::filesystem::recursive_directory_iterator(src / b))
+            if (entry.is_regular_file())
+                importedFiles.emplace(entry.path(), readText(entry.path()));
+        for (const auto &[file, text] : importedFiles)
+            std::filesystem::remove(file);
+        const auto removedImported = run("write 42;");
+        if (removedImported.value("passed", true) ||
+            removedImported.at("report").value("error", "").find("managed schema header") ==
+                std::string::npos || log.find("Rejoining native schema") != std::string::npos)
+            throw std::runtime_error("Removing all imported schema files bypassed managed history: " +
+                                     removedImported.dump());
+        for (const auto &[file, text] : importedFiles)
+            writeText(file, text);
         writeText(src / (b + ".scm"), header(b, true));
         std::filesystem::remove(imports);
         writeText(src / a / "types" / "RetryType.cls", cls(a, "RetryType"));

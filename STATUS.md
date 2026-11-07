@@ -1,6 +1,6 @@
 # Jade CLI status
 
-Implementation checkpoint: CLI 0.4.0, PR [#7](https://github.com/darrenhull/Jade-CLI/pull/7). Verified implementation head: `116279e` (this documentation checkpoint may follow it).
+Implementation checkpoint: CLI 0.4.0, PR [#7](https://github.com/darrenhull/Jade-CLI/pull/7). Verified implementation baseline: `cc394ac` (this documentation checkpoint may follow it).
 
 ## Delivered
 
@@ -8,7 +8,7 @@ Implementation checkpoint: CLI 0.4.0, PR [#7](https://github.com/darrenhull/Jade
 - Exact snapshot diagnostics, bounded output, cancellation, timeout and recovery; Source publication remains separate.
 - Schema-only/resource input preparation, one-pass visible schema scope, complete scoped inventories and unchanged-input reuse.
 - Native class removal under complete schema declarations; partial/missing managed headers fail closed.
-- Locally imported class files cannot bypass missing schema headers.
+- Declared imported schema names remain in managed-history validation even after their header and every local class/resource file are removed. Missing previously managed imports fail closed before native rejoin.
 - Durable managed identities survive failed native preparation and same-path class/schema replacement, independently of reusable build claims.
 - Version-specific consumer release notes describe the actual new scratch execution feature; development/review details stay here and in PR documentation.
 
@@ -20,7 +20,7 @@ Implementation checkpoint: CLI 0.4.0, PR [#7](https://github.com/darrenhull/Jade
 - Final connected fixture removed after disconnect; no owned native processes remain. Earlier blocked-cleanup fixtures are retained untouched.
 - Portable native executable smoke, configuration, packaging, publisher contracts and actionlint passed. Publisher tests cover explicit feature notes, missing-note rejection, immutable published releases and draft resume.
 - Final required hosted checks are linked on PR7; implementation head116279e started [run42313020516](https://github.com/darrenhull/Jade-CLI/actions/runs/42313020516). The latest PR head, including this checkpoint, must be green before readiness.
-- Existing six Codex findings are resolved after verified fixes. Any later findings must be checked before readiness.
+- A seventh Codex finding (all files of an imported schema removed) was reproduced with a failing scope/inventory regression. The minimal import-name retention fix passes unit tests and the extended actual native preparation/deletion/history proof. The native fixture was disconnected and removed. Hosted checks for the new head remain required.
 
 ## Pending
 
