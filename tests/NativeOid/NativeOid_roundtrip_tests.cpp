@@ -11,7 +11,8 @@ int main() {
         if (!variable)
             throw std::runtime_error("Set JADE_OID_TEST_SEED to an isolated integration seed.");
         const auto seed = std::filesystem::canonical(variable);
-        if (seed.filename().wstring().find(L"jade-cli-integration-seed-") != 0 ||
+        if (seed.parent_path() != std::filesystem::canonical(std::filesystem::temp_directory_path()) ||
+            seed.filename().wstring().find(L"jade-cli-integration-seed-") != 0 ||
             !std::filesystem::exists(seed / L"system/_control.dat"))
             throw std::runtime_error("A disposable native integration seed is required.");
         const auto jadeHome = _wgetenv(L"JADE_HOME");

@@ -66,7 +66,11 @@ The inspector source matches its original committed helper source; the committed
 - Candidate package version 0.3.2 is provisional. If reviewed main releases 0.4 first, this focused change must rebase and become 0.4.1. No release has been claimed.
 - Actual Source/Working service proof passed: native catalog/object identity roundtrips and native malformed-input failures on both targets; all owned native sessions stopped and the disposable Working fixture removed. Portable package smoke passed outside the checkout without Node on PATH.
 - Complete default C++ suite passed (51 grouped executables, connected proofs skipped unless explicitly enabled). Distribution validation, package tests and portable no-Node smoke also passed.
-- Pending: bot Draft PR/hosted CI/review, protected-main release and official consumer pin/package verification. Extension and MCP agents have a candidate copy for parallel integration.
+- Draft PR8 head e94858f is published for validation. Pending: latest hosted CI/review, protected-main release and official consumer pin/package verification. Extension and MCP agents have a candidate copy for parallel integration.
+
+### Integration fixture correction
+
+Consumer copies initially retained absolute writable INI paths into the old private seed. A repeated check correctly failed with native3014; that private seed is preserved and no production Source was touched. It invalidates those initial consumer isolation claims. Three fresh independent fixtures were provisioned through native verified backup and restore, with all mutable INI directories preflighted under their respective owned roots. Copying or renaming a native seed/INI is prohibited in this proof. The SDK proof passes again on the fresh CLI fixture, with explicit caller readOnly=false still yielding native DB_READ_ONLY usage1. Consumer revalidation is pending against their separate native-provisioned fixtures.
 
 ## T01 — Separate Workspace execution feature
 
