@@ -1,4 +1,7 @@
 $ErrorActionPreference = 'Stop'
+$originalExitVariable = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+$hadNativeExitCode = $null -ne $originalExitVariable
+$originalNativeExitCode = if ($hadNativeExitCode) { $originalExitVariable.Value } else { $null }
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $workflow = [IO.File]::ReadAllText((Join-Path $root '.github/workflows/build-release.yml')).Replace("`r`n", "`n")
 if($workflow -match '(?m)^    tags:'){throw 'Tag pushes can race main publication; publish from main pushes only.'}
@@ -125,5 +128,7 @@ try {
     Set-Location -LiteralPath $previous
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name,$before[$name],'Process') }
     Remove-Item Function:\gh,Function:\git
+    if ($hadNativeExitCode) { $global:LASTEXITCODE = $originalNativeExitCode }
+    else { Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $temporary -Recurse -Force
 }
