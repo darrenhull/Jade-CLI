@@ -177,7 +177,7 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
             throw std::runtime_error("Invalid database selection.");
         auto selected = target == "working" ? WorkingEngine::inspectionConfig(config) : config;
         selected["readOnly"] = true;
-        return {{"code", 0}, {"passed", true}, {"config", selected}};
+        return {{"code", 0}, {"passed", true}, {"oidFormat", "jade-native"}, {"config", selected}};
     }
     if (command == "cli" || command == "prepare") {
         const auto prepared = CommandLine().prepare(
@@ -211,6 +211,7 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
                   {"test", true},
                   {"sourceSearch", true},
                   {"inspection", true},
+                  {"oidFormat", "jade-native"},
                   {"nativeUtility", true},
                   {"workspace", true},
                   {"debug", false},
@@ -276,7 +277,7 @@ nlohmann::json RuntimeOperations::execute(const nlohmann::json &originalRequest,
                 it->second->close();
                 inspections_.erase(it);
             }
-            return {{"code", 0}, {"passed", true}};
+            return {{"code", 0}, {"passed", true}, {"body", {{"oidFormat", "jade-native"}}}};
         }
         if (!std::set<std::string>{"catalog", "instances", "object", "collection", "release"}
                  .contains(action))

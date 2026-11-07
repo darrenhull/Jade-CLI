@@ -13,6 +13,8 @@ int main() {
         if (doctor["runtimeImplementation"] != "native-cpp" || doctor["sdkVersion"] != cliVersion ||
             !doctor["passed"].get<bool>())
             throw std::runtime_error("doctor must truthfully identify native implementation");
+        if (doctor["capabilities"].value("oidFormat", "") != "jade-native")
+            throw std::runtime_error("doctor must advertise native Jade OID representation");
         bool rejected = false;
         try {
             runtime.execute({{"command", "native.run"},

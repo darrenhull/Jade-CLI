@@ -50,7 +50,7 @@ Get-ChildItem (Join-Path $root 'native-bin') -File | Where-Object {$_.Extension 
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $output -Force
 Copy-Item -LiteralPath (Join-Path $root 'ThirdPartyNotices.txt') -Destination $output -Force
 $nativeVersion=[regex]::Match([IO.File]::ReadAllText((Join-Path $root 'native-cli/Version.hpp')),'cliVersion\[\]\s*=\s*"([^"]+)"').Groups[1].Value
-$manifest=@{formatVersion=2;runtime='native-cpp';platform='win32';arch='x64';packageVersion=$nativeVersion;executable='jade-cli.exe';executableSha256=(Get-FileHash -LiteralPath (Join-Path $output 'jade-cli.exe') -Algorithm SHA256).Hash.ToLowerInvariant();runtimeFiles=@{}}
+$manifest=@{oidFormat='jade-native';formatVersion=2;runtime='native-cpp';platform='win32';arch='x64';packageVersion=$nativeVersion;executable='jade-cli.exe';executableSha256=(Get-FileHash -LiteralPath (Join-Path $output 'jade-cli.exe') -Algorithm SHA256).Hash.ToLowerInvariant();runtimeFiles=@{}}
 foreach($file in Get-ChildItem $output -File -Recurse){if($file.Name -notin @('distribution.json','jade-cli.exe')){$relative=$file.FullName.Substring($output.Length+1).Replace('\','/');$manifest.runtimeFiles[$relative]=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}}
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $output 'distribution.json') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $output 'jade-cli.exe') -Destination (Join-Path $root 'jade-cli.exe') -Force
